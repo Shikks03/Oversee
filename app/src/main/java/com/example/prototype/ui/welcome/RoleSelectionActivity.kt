@@ -3,6 +3,8 @@ package com.example.prototype.ui.welcome
 // --- ANDROID & CORE ---
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.content.edit
@@ -26,11 +28,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
+import com.example.prototype.data.AuthRepository
+import com.example.prototype.data.UserRepository
 
 // --- PROJECT SPECIFIC ---
 import com.example.prototype.ui.child.ChildDashboardActivity
 import com.example.prototype.ui.parent.ParentDashboardActivity
 import com.example.prototype.ui.theme.AppTheme
+
 
 /**
  * RoleSelectionActivity
@@ -46,28 +51,17 @@ import com.example.prototype.ui.theme.AppTheme
  */
 class RoleSelectionActivity : ComponentActivity() {
 
-    // --- CONSTANTS ---
-    companion object {
-        private const val PREFS_NAME = "AppConfig" // The physical XML file name in storage.
-        private const val KEY_ROLE = "role"        // Key for storing the user type.
-        private const val KEY_DEVICE_ID = "device_id" // Key for the child's unique identifier.
-        private const val ROLE_CHILD = "CHILD"
-        private const val ROLE_PARENT = "PARENT"
-    }
-
     // --- LIFECYCLE ---
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        val prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
-        val user = prefs.getString("name", "User") ?: "User"
-
         /**
          * SEQUENCE STEP 1: Auto-Login Check.
          * We do this BEFORE setContent to prevent the UI from "flashing" the selection
          * screen if the user is already logged in.
          */
         if (attemptAutoLogin()) return
+
+        val userName = UserRepository.getLocalName(this)
 
         /**
          * SEQUENCE STEP 2: Render UI.
@@ -76,9 +70,9 @@ class RoleSelectionActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 RoleSelectionScreen(
-                    user = user,
-                    onSelectChild = { handleChildLogin() },
-                    onSelectParent = { handleParentLogin() }
+                    user = userName,
+                    onSelectChild = { selectRole("CHILD") },
+                    onSelectParent = { selectRole("PARENT") }
                 )
             }
         }
@@ -87,65 +81,38 @@ class RoleSelectionActivity : ComponentActivity() {
     // --- LOGIC: SESSION MANAGEMENT ---
 
     /**
-     * DATA FLOW: SharedPreferences -> App Logic.
-     * Reads the 'AppConfig' file to see if a role has been persisted.
+     * Checks if a role is already saved in local storage (AppConfig).
      */
     private fun attemptAutoLogin(): Boolean {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-
-        // Read the stored role; returns null if it's the first run.
-        return when (prefs.getString(KEY_ROLE, null)) {
-            ROLE_CHILD -> {
-                // If a child role exists, redirect to Child Dashboard.
+        val currentRole = UserRepository.getLocalRole(this)
+        return when (currentRole) {
+            "CHILD" -> {
                 navigateToDashboard(ChildDashboardActivity::class.java)
                 true
             }
-            ROLE_PARENT -> {
-                // If a parent role exists, redirect to Parent Dashboard.
+            "PARENT" -> {
                 navigateToDashboard(ParentDashboardActivity::class.java)
                 true
             }
-            else -> false // No session found; proceeds to show the UI.
+            else -> false // role is "NOT_SET"
         }
-    }
-
-    // --- LOGIC: ROLE HANDLERS ---
-
-    /**
-     * DATA FLOW: Logic -> SharedPreferences.
-     * Specific logic for setting up a Child device.
-     */
-    private fun handleChildLogin() {
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-
-        /**
-         * IDENTITY GENERATION:
-         * A Child device needs a persistent ID so the Parent can link to it.
-         * We check if it exists first to avoid overwriting a previous ID.
-         */
-        if (!prefs.contains(KEY_DEVICE_ID)) {
-            val newId = (100000..999999).random().toString() // Generate a 6-digit link code.
-            prefs.edit { putString(KEY_DEVICE_ID, newId) }   // Save to storage.
-        }
-
-        saveRoleAndRedirect(ROLE_CHILD, ChildDashboardActivity::class.java)
-    }
-
-    private fun handleParentLogin() {
-        // Parent devices don't need a generated ID as they are the "viewers".
-        saveRoleAndRedirect(ROLE_PARENT, ParentDashboardActivity::class.java)
     }
 
     /**
-     * PERSISTENCE:
-     * Commits the selected role to SharedPreferences so attemptAutoLogin()
-     * finds it next time the app starts.
+     * Updates the role in both Cloud and Local storage.
      */
-    private fun saveRoleAndRedirect(role: String, targetActivity: Class<*>) {
-        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit {
-            putString(KEY_ROLE, role)
+    private fun selectRole(role: String) {
+        val uid = AuthRepository.getUserId() ?: return
+
+        UserRepository.updateUserRole(this, uid, role) { success ->
+            if (success) {
+                val target = if (role == "CHILD") ChildDashboardActivity::class.java
+                else ParentDashboardActivity::class.java
+                navigateToDashboard(target)
+            } else {
+                Toast.makeText(this, "Failed to update role. Try again.", Toast.LENGTH_SHORT).show()
+            }
         }
-        navigateToDashboard(targetActivity)
     }
 
     /**
@@ -174,7 +141,7 @@ fun RoleSelectionScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppTheme.Background)
+            .background(AppTheme.Surface)
             .padding(57.dp, 103.dp, 57.dp, 103.dp),
         contentAlignment = Alignment.Center,
     ) {

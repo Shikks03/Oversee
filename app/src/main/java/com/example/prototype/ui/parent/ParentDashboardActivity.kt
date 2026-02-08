@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
+import androidx.compose.foundation.text.KeyboardOptions
 
 // --- COMPOSE MATERIAL & ICONS ---
 import androidx.compose.material.icons.Icons
@@ -26,7 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 
@@ -42,16 +45,20 @@ import com.example.prototype.ui.welcome.RoleSelectionActivity // Or LoginActivit
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.core.content.edit
+import com.example.prototype.data.AuthRepository
+import com.example.prototype.data.IncidentRepository
+import com.example.prototype.data.UserRepository
+import com.example.prototype.ui.welcome.SignInActivity
 
 
 class ParentDashboardActivity : ComponentActivity() {
-    private val db = FirebaseFirestore.getInstance()
-    private val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-
 
     // --- STATE MANAGEMENT ---
+    private val currentTargetId = mutableStateOf("NOT_LINKED")
+    private val incidentsList = mutableStateOf<List<FirebaseSyncManager.LogEntry>>(emptyList())
+
     private var incidentList = mutableStateListOf<FirebaseSyncManager.LogEntry>()
-    private var currentTargetId = mutableStateOf("NOT_LINKED")
+     val isLoading = mutableStateOf(false)
     private var isRefreshing = mutableStateOf(false)
 
 
@@ -59,11 +66,12 @@ class ParentDashboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        loadSavedTargetId()
-        syncTargetIdWithCloud()
-        refreshDashboard()
+        // 1. Initial Load: Get ID from Local Repository
+        loadLocalData()
 
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+        if (currentTargetId.value != "NOT_LINKED") refreshDashboard()
+
+        val user = UserRepository.getLocalName(this)
 
         setContent {
             MaterialTheme {
@@ -71,14 +79,27 @@ class ParentDashboardActivity : ComponentActivity() {
                 var showLinkDialog by remember { mutableStateOf(false) }
                 var showLogoutDialog by remember { mutableStateOf(false) }
 
-                ParentDashboardScreen(
-                    targetId = currentTargetId.value,
-                    incidents = incidentList,
-                    refreshing = isRefreshing.value,
-                    onRefresh = { refreshDashboard() },
-                    onHeaderSettingsClick = { showLinkDialog = true }, // Gear icon in header
-                    onBottomNavSettingsClick = { showLogoutDialog = true } // Settings in Bottom Nav
-                )
+                val user = UserRepository.getLocalName(this)
+
+                // If NOT_LINKED, show the setup screen first.
+                if (currentTargetId.value == "NOT_LINKED") {
+                    LinkDeviceSetupScreen(
+                        user = user,
+                        onLinkConfirmed = { newId -> updateTargetId(newId) },
+                        onLogout = { performLogout() }
+                    )
+                } else {
+                    // If already linked, show the actual dashboard
+                    ParentDashboardScreen(
+                        targetId = currentTargetId.value,
+                        incidents = incidentList,
+                        refreshing = isRefreshing.value,
+                        onRefresh = { refreshDashboard() },
+                        onHeaderSettingsClick = { showLinkDialog = true },
+                        onBottomNavSettingsClick = { showLogoutDialog = true },
+                        onDebugResetRole = { debugResetRole() }
+                    )
+                }
 
                 // Dialog 1: Link Device
                 if (showLinkDialog) {
@@ -107,91 +128,146 @@ class ParentDashboardActivity : ComponentActivity() {
 
     // --- DATA LOGIC ---
 
-    private fun loadSavedTargetId() {
-        val prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
-        currentTargetId.value = prefs.getString("target_id", "NOT_LINKED") ?: "NOT_LINKED"
-    }
+    private fun loadLocalData() {
+        // 🟢 Repository Call: fast local read
+        val savedId = UserRepository.getLocalTargetId(this)
+        currentTargetId.value = savedId
 
-    private fun syncTargetIdWithCloud() {
-        val uid = auth.currentUser?.uid ?: return
-
-        // Pull the linked ID from the user's profile in the cloud
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener { document ->
-                val cloudId = document.getString("linked_child_id") ?: ""
-                if (cloudId.isNotEmpty()) {
-                    // Update local storage and UI
-                    getSharedPreferences("AppConfig", MODE_PRIVATE).edit {
-                        putString("target_id", cloudId)
-                    }
-                    currentTargetId.value = cloudId
-                    refreshDashboard()
-                }
-            }
-    }
-
-    // 🟢 UPDATED: Save to cloud whenever you link a new device
-    private fun updateTargetId(newId: String) {
-        val uid = auth.currentUser?.uid ?: return
-
-        // 1. Update UI and Local Storage IMMEDIATELY
-        getSharedPreferences("AppConfig", MODE_PRIVATE).edit {
-            putString("target_id", newId)
+        // If we have a valid ID, fetch the logs from cloud
+        if (savedId != "NOT_LINKED") {
+            fetchLogs()
         }
-        currentTargetId.value = newId // UI updates now
-
-        // 2. Sync to Firestore in the background
-        db.collection("users").document(uid)
-            .update("linked_child_id", newId)
-            .addOnSuccessListener {
-                refreshDashboard()
-                Toast.makeText(this, "Link Synced to Cloud", Toast.LENGTH_SHORT).show()
-            }
-            .addOnFailureListener { e ->
-                // If the document doesn't exist, we use 'set' with merge instead of 'update'
-                db.collection("users").document(uid)
-                    .set(mapOf("linked_child_id" to newId), SetOptions.merge())
-
-                Log.e("ParentDashboard", "Cloud update failed, retrying with merge", e)
-            }
     }
 
-    private fun refreshDashboard() {
-        if (currentTargetId.value == "NOT_LINKED") return
+    private fun updateTargetId(newId: String) {
+        val uid = AuthRepository.getUserId() ?: return
 
+        UserRepository.linkChildDevice(this, uid, newId) { success ->
+            if (success) {
+                currentTargetId.value = newId
+                refreshDashboard()
+                Toast.makeText(this, "Device Linked Successfully", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to link device", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun linkChild(newChildId: String) {
+        val uid = AuthRepository.getUserId() ?: return
+        if (newChildId.length != 6) {
+            Toast.makeText(this, "ID must be 6 digits", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isLoading.value = true
+
+        // 🟢 Repository Call: Orchestrates Cloud update + Local Save
+        UserRepository.linkChildDevice(this, uid, newChildId) { success ->
+            isLoading.value = false
+            if (success) {
+                currentTargetId.value = newChildId
+                fetchLogs() // Immediately load logs for the new device
+                Toast.makeText(this, "Device Linked!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to link. Check ID.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun fetchLogs() {
+        val target = currentTargetId.value
+        if (target == "NOT_LINKED") return
+
+        isLoading.value = true
+
+        // 🟢 Repository Call: Fetches logs cleanly
+        IncidentRepository.fetchRecentIncidents(
+            childId = target,
+            onSuccess = { logs ->
+                isLoading.value = false
+                incidentsList.value = logs
+            },
+            onError = { error ->
+                isLoading.value = false
+                Toast.makeText(this, "Error: $error", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+//    private fun loadSavedTargetId() {
+//        val prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
+//        currentTargetId.value = prefs.getString("target_id", "NOT_LINKED") ?: "NOT_LINKED"
+//    }
+//
+//    private fun syncTargetIdWithCloud() {
+//        val uid = AuthRepository.getUserId() ?: return
+//
+//        // 🟢 USE REPOSITORY
+//        UserRepository.getUserProfile(
+//            uid = uid,
+//            onSuccess = { data ->
+//                val cloudId = data["linked_child_id"] as? String ?: ""
+//                if (cloudId.isNotEmpty() && cloudId != "NOT_LINKED") {
+//                    updateLocalTargetId(cloudId) // Helper to save to prefs
+//                    currentTargetId.value = cloudId
+//                    refreshDashboard()
+//                }
+//            },
+//            onError = { Log.e("Dashboard", it) }
+//        )
+//    }
+//
+//    // 🟢 UPDATED: Save to cloud whenever you link a new device
+//    private fun updateTargetId(newId: String) {
+//        val uid = AuthRepository.getUserId() ?: return
+//
+//        // 1. Update Local
+//        updateLocalTargetId(newId)
+//        currentTargetId.value = newId
+//
+//        // 🟢 USE REPOSITORY
+//        UserRepository.linkChildDevice(
+//            uid = uid,
+//            childId = newId,
+//            onSuccess = {
+//                refreshDashboard()
+//                Toast.makeText(this, "Link Synced", Toast.LENGTH_SHORT).show()
+//            },
+//            onError = { Toast.makeText(this, "Link Failed: $it", Toast.LENGTH_SHORT).show() }
+//        )
+//    }
+//
+    private fun refreshDashboard() {
         isRefreshing.value = true
-        db.collection("monitor_sessions").document(currentTargetId.value).collection("logs")
-            .orderBy("timestamp", Query.Direction.DESCENDING).limit(50).get()
-            .addOnSuccessListener { documents ->
+        // 🟢 Repository Call: Fetch from cloud
+        IncidentRepository.fetchRecentIncidents(
+            childId = currentTargetId.value,
+            onSuccess = { logs ->
                 incidentList.clear()
-                for (doc in documents) {
-                    incidentList.add(FirebaseSyncManager.LogEntry(
-                        word = doc.getString("word") ?: "?",
-                        severity = doc.getString("severity") ?: "LOW",
-                        app = doc.getString("app") ?: "Unknown",
-                        timestamp = doc.getLong("timestamp") ?: 0L
-                    ))
-                }
+                incidentList.addAll(logs)
                 isRefreshing.value = false
-            }
-            .addOnFailureListener {
+            },
+            onError = { error ->
                 isRefreshing.value = false
-                Toast.makeText(this, "Error: ${it.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
             }
+        )
     }
 
     private fun performLogout() {
-        getSharedPreferences("AppConfig", MODE_PRIVATE).edit {
-            // Only remove the role, not the target_id link
-            remove("role")
-        }
-
-        // Sign out of Firebase
-        auth.signOut()
-
-        val intent = Intent(this, com.example.prototype.ui.welcome.LoginActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        startActivity(intent)
+        // 🟢 Repository Call: Clears session and local data
+        AuthRepository.logout(this)
+        startActivity(Intent(this, SignInActivity::class.java))
+        finish()
+    }
+    /**
+     * DEBUG: Clears only the 'role' key.
+     * This forces the app back to Role Selection while keeping the Child Link intact.
+     */
+    private fun debugResetRole() {
+        UserRepository.clearLocalRole(this) //
+        startActivity(Intent(this, RoleSelectionActivity::class.java)) //
         finish()
     }
 }
@@ -205,7 +281,8 @@ fun ParentDashboardScreen(
     refreshing: Boolean,
     onRefresh: () -> Unit,
     onHeaderSettingsClick: () -> Unit,
-    onBottomNavSettingsClick: () -> Unit
+    onBottomNavSettingsClick: () -> Unit,
+    onDebugResetRole: () -> Unit
 ) {
     Scaffold(
         bottomBar = { ParentBottomNavigation(onSettingsClick = onBottomNavSettingsClick) },
@@ -264,6 +341,17 @@ fun ParentDashboardScreen(
                     if (refreshing) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
                     else Text("Refresh Data")
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                HorizontalDivider()
+                TextButton(
+                    onClick = onDebugResetRole,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    Text("Debug: Log Out of Role (Keep Link)", color = Color.Gray)
+                }
+
+                Spacer(modifier = Modifier.height(40.dp))
             }
             Spacer(Modifier.height(40.dp))
         }
@@ -410,6 +498,105 @@ fun SeverityBadge(severity: String, modifier: Modifier = Modifier) {
 // --- DIALOGS & NAVIGATION ---
 
 @Composable
+fun LinkDeviceSetupScreen(
+    user: String,
+    onLinkConfirmed: (String) -> Unit,
+    onLogout: () -> Unit
+) {
+    var childIdInput by remember { mutableStateOf("") }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.Surface)
+            .padding(horizontal = 57.dp, vertical = 103.dp), // Matches Role Selection
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // --- TOP SECTION (Hello Text) ---
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top)) {
+                // Large Link Icon
+                Icon(
+                    modifier = Modifier.size(88.dp),
+                    imageVector = Icons.Default.Link,
+                    contentDescription = null,
+                    tint = AppTheme.Primary
+                )
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "Link Child Device",
+                    style = AppTheme.TitlePageStyle,
+                    textAlign = TextAlign.Left
+                )
+                Text(
+                    text = "Link a child device to start monitoring.",
+                    style = AppTheme.BodyBase,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(90.dp))
+
+            // --- CENTER SECTION (Icon & Input) ---
+            Column(
+                modifier = Modifier.width(250.dp), // Slightly wider to fit text input
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(40.dp, Alignment.Top)
+            ) {
+                // Input Field
+                OutlinedTextField(
+                    value = childIdInput,
+                    onValueChange = { input ->
+                        // 🟢 1. Only allow digits AND 2. Limit length to 6
+                        if (input.all { it.isDigit() } && input.length <= 6) {
+                            childIdInput = input
+                        }
+                    },
+                    label = {
+                        Text(
+                            text = "Child Id",
+                            style = AppTheme.BodyBase, // Use a smaller style for the label
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    },
+                    //  Force the numeric keyboard
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true,
+                    textStyle = AppTheme.TitlePageStyle.copy(textAlign = TextAlign.Center)
+                )
+
+                // Confirm Button (Styled like your RoleButton)
+                Button(
+                    onClick = { if (childIdInput.isNotEmpty()) onLinkConfirmed(childIdInput) },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("LINK DEVICE", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f)) // Pushes Logout to bottom
+
+            // --- BOTTOM SECTION ---
+            TextButton(onClick = onLogout) {
+                Text(
+                    text = "Not your account? Logout",
+                    style = AppTheme.BodyBase,
+                    textDecoration = TextDecoration.Underline,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun ParentBottomNavigation(onSettingsClick: () -> Unit) {
     NavigationBar(containerColor = AppTheme.Surface) {
         NavigationBarItem(
@@ -459,16 +646,26 @@ fun LogoutDialog(onDismiss: () -> Unit, onLogout: () -> Unit) {
 
 // --- PREVIEWS ---
 
-@Preview(showBackground = true, showSystemUi = true)
+@Preview(showBackground = true, showSystemUi = true, device = "id:pixel_6")
 @Composable
-fun DashboardPreview() {
+fun ParentDashboardPreview() {
+    // Mock incidents for the statistics card and log table
     val mockIncidents = listOf(
-        FirebaseSyncManager.LogEntry("scam", "HIGH", "Facebook", System.currentTimeMillis()),
-        FirebaseSyncManager.LogEntry("bully", "MEDIUM", "Messenger", System.currentTimeMillis() - 600000)
+        FirebaseSyncManager.LogEntry("scam_link", "HIGH", "Messenger", System.currentTimeMillis()),
+        FirebaseSyncManager.LogEntry("inappropriate_term", "MEDIUM", "Facebook", System.currentTimeMillis() - 3600000),
+        FirebaseSyncManager.LogEntry("safe_word", "LOW", "WhatsApp", System.currentTimeMillis() - 7200000)
     )
-    MaterialTheme {
-        ParentDashboardScreen("Pixel 6 (Mock)", mockIncidents, false, {}, {}, {})
-    }
+
+    ParentDashboardScreen(
+        targetId = "882-149", // A mock linked child ID
+        incidents = mockIncidents,
+        refreshing = false,
+        onRefresh = {},
+        onHeaderSettingsClick = {},
+        onBottomNavSettingsClick = {},
+        onDebugResetRole = {} //
+    )
+
 }
 
 @Preview(showBackground = true, device = "id:pixel_6")
@@ -506,5 +703,17 @@ fun LinkDialogPreview() {
                 onConfirm = {}
             )
         }
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true, device = "id:pixel_6")
+@Composable
+fun LinkDeviceSetupScreenPreview() {
+    MaterialTheme {
+        LinkDeviceSetupScreen(
+            user = "Parent",
+            onLinkConfirmed = {},
+            onLogout = {}
+        )
     }
 }

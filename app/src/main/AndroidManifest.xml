@@ -23,12 +23,12 @@
             android:name=".ui.welcome.RoleSelectionActivity"
             android:exported="false" />
         <activity
-            android:name=".ui.welcome.SignupActivity"
+            android:name=".ui.welcome.SignUpActivity"
             android:exported="false" />
 
 
         <activity
-            android:name=".ui.welcome.LoginActivity"
+            android:name=".ui.welcome.SignInActivity"
             android:exported="true"
             android:theme="@style/Theme.Prototype">
             <intent-filter>

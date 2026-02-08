@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.*
  */
 object AppTheme {
     // Colors (Refined from original XML hex values)
-    val Background = Color(0xFFF0F7FF) // Light Blue
+    val Background = Color(0xFFF2F2F2) // Light Blue
     val SecBackground = Color(0xFF457cba) // Dark Blue
     val Surface = Color(0xFFFFFFFF)    // Pure White
     val Primary = Color(0xFF2196F3)    // Parent Blue
@@ -54,3 +54,10 @@ val AppTypography = Typography(
     displayLarge = AppTheme.TitlePageStyle,
     bodyLarge = TextStyle(fontSize = 16.sp)
 )
+
+//TEMP
+object UserRoles{
+    const val PARENT = "parent"
+    const val CHILD = "child"
+    const val UNSET = "NOT_SET"
+}

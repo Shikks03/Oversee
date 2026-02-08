@@ -14,15 +14,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.prototype.ui.parent.ParentDashboardActivity
 import com.example.prototype.ui.theme.AppTheme
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.VerifiedUser
@@ -30,12 +24,10 @@ import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.prototype.data.AuthRepository
 
 
-class SignupActivity : ComponentActivity() {
-
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
+class SignUpActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,10 +35,10 @@ class SignupActivity : ComponentActivity() {
             MaterialTheme {
                 SignUpScreen(
                     onSignUp = { name, email, password ->
-                        registerUser(name, email, password)
+                        performRegistration(name, email, password)
                     },
                     onLoginClick = {
-                        startActivity(Intent(this, LoginActivity::class.java))
+                        startActivity(Intent(this, SignInActivity::class.java))
                         finish()
                     }
                 )
@@ -54,51 +46,25 @@ class SignupActivity : ComponentActivity() {
         }
     }
 
-    private fun registerUser(name: String, email: String, pass: String) {
+    private fun performRegistration(name: String, email: String, pass: String) {
         if (name.isBlank() || email.isBlank() || pass.isBlank()) {
             Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
             return
         }
 
-        // 1. Create Auth User (Auto-Hashes Password)
-        auth.createUserWithEmailAndPassword(email, pass)
-            .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: return@addOnSuccessListener
-
-                // 2. Create User Map for Firestore
-                val userMap = hashMapOf(
-                    "name" to name,
-                    "email" to email,
-                    "role" to "PARENT",
-                    "linked_child_id" to "",
-                    "created_at" to System.currentTimeMillis()
-                )
-
-                // 3. Save to Firestore
-                db.collection("users").document(uid).set(userMap)
-                    .addOnSuccessListener {
-                        // Save session locally
-                        Toast.makeText(this, "Account Created!", Toast.LENGTH_SHORT).show()
-                        startActivity(Intent(this, ParentDashboardActivity::class.java))
-                        finish()
-                    }
-                    .addOnFailureListener { e ->
-                        Toast.makeText(this, "Failed to save profile: ${e.message}", Toast.LENGTH_LONG).show()
-                    }
+        AuthRepository.register(this, name, email, pass) { success, error ->
+            if (success) {
+                Toast.makeText(this, "Account Created!", Toast.LENGTH_SHORT).show()
+                // Navigate to Role Selection so they can choose Parent/Child
+                startActivity(Intent(this, RoleSelectionActivity::class.java))
+                finish()
+            } else {
+                Toast.makeText(this, "Registration Failed: $error", Toast.LENGTH_LONG).show()
             }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Registration Failed: ${e.message}", Toast.LENGTH_LONG).show()
-            }
-    }
-
-    private fun saveSession(childId: String) {
-        getSharedPreferences("AppConfig", MODE_PRIVATE).edit().apply {
-            putString("role", "PARENT")
-            putString("linked_child_id", childId) // Persist locally for speed
-            apply()
         }
     }
 }
+
 
 @Composable
 fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () -> Unit) {
@@ -128,7 +94,7 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
             // 3. Bottom Sheet Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.Surface),
                 shape = RoundedCornerShape(topStart = 44.dp, topEnd = 44.dp)
             ) {
                 Column(

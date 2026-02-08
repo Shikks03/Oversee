@@ -1,18 +1,15 @@
 package com.example.prototype.ui.child
 
 // --- ANDROID & CORE ---
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.*
-import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.edit
 
 // --- JETPACK COMPOSE UI ---
 import androidx.compose.animation.*
@@ -21,13 +18,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.*
-
-// --- COMPOSE MATERIAL & ICONS ---
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-
-// --- COMPOSE RUNTIME ---
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,13 +31,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 
 // --- PROJECT SPECIFIC ---
+import com.example.prototype.data.AuthRepository
+import com.example.prototype.data.UserRepository
 import com.example.prototype.data.remote.FirebaseSyncManager
-import com.example.prototype.service.OverlayService
+import com.example.prototype.service.ScreenCaptureService
+import com.example.prototype.ui.parent.ParentDashboardScreen
 import com.example.prototype.ui.theme.AppTheme
 import com.example.prototype.ui.welcome.RoleSelectionActivity
+import com.example.prototype.ui.welcome.SignInActivity
 import com.google.firebase.FirebaseApp
-import com.example.prototype.service.ScreenCaptureService
-import com.example.prototype.utils.sendConsoleUpdate
 
 // --- UTILS ---
 import java.text.SimpleDateFormat
@@ -54,75 +49,54 @@ import kotlin.system.exitProcess
 class ChildDashboardActivity : ComponentActivity() {
 
     // --- STATE MANAGEMENT ---
-    private var deviceId = mutableStateOf("...")
+    private var deviceId = mutableStateOf("Loading...")
     private var consoleLogs = mutableStateListOf<String>()
 
-    // Permission & Health States
-    private var isAccessibilityOn = mutableStateOf(false)
-    private var isNotificationOn = mutableStateOf(false)
-    private var isOverlayOn = mutableStateOf(false)
-    private var isInternetOn = mutableStateOf(false)
-    private var isFirebaseReady = mutableStateOf(false)
-    private var isScreenCaptureActive = mutableStateOf(false)
+    // Health States
+    private var healthStates = mutableStateMapOf<String, Boolean>()
+    private var isReady = mutableStateOf(false)
 
-    private val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-    private val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
     private val consoleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val message = intent?.getStringExtra("message") ?: return
-            addToConsole(message)
+            intent?.getStringExtra("message")?.let { addToConsole(it) }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Register for updates from services immediately.
-        val filter = IntentFilter("com.example.prototype.CONSOLE_UPDATE")
-        registerReceiver(consoleReceiver, filter, RECEIVER_NOT_EXPORTED)
-
-        loadDeviceInfo()     // Data Flow: Preferences -> UI
-        performHealthCheck() // Logic: Check System Permissions
-        addToConsole("System Initialized.")
-
+        // 1. Setup Receivers & Theme
+        registerReceiver(consoleReceiver, IntentFilter("com.example.prototype.CONSOLE_UPDATE"), RECEIVER_NOT_EXPORTED)
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+
+        // 2. Startup Initialization (Cleaned up)
+        initializeDeviceIdentity()
+        performHealthCheck()
+        addToConsole("System Initialized.")
 
         setContent {
             MaterialTheme {
                 var showEditDialog by remember { mutableStateOf(false) }
 
-                // Logic: System is 'Ready' only if ALL health checks pass.
-                val allChecksOk = isAccessibilityOn.value && isNotificationOn.value &&
-                        isOverlayOn.value && isInternetOn.value &&
-                        isFirebaseReady.value && isScreenCaptureActive.value
-
-                // Render the main UI screen.
                 ChildDashboardScreen(
                     deviceId = deviceId.value,
                     consoleLogs = consoleLogs,
-                    isReady = allChecksOk,
-                    checks = mapOf(
-                        "Accessibility" to isAccessibilityOn.value,
-                        "Notifications" to isNotificationOn.value,
-                        "Overlay" to isOverlayOn.value,
-                        "Internet" to isInternetOn.value,
-                        "Firebase" to isFirebaseReady.value,
-                        "Capture" to isScreenCaptureActive.value
-                    ),
+                    isReady = isReady.value,
+                    checks = healthStates,
                     onFixPermission = { label -> navigateToSetting(label) },
                     onForceSync = { triggerSync() },
                     onLogout = { performLogout() },
                     onExit = { killApp() },
-                    onEditIdClick = { showEditDialog = true }
+                    onEditIdClick = { showEditDialog = true },
+                    onDebugResetRole = { debugResetRole() }
                 )
 
-                // Dialog Logic for editing the Device ID.
                 if (showEditDialog) {
                     EditDeviceIdDialog(
                         currentId = deviceId.value,
                         onDismiss = { showEditDialog = false },
                         onConfirm = { newId ->
-                            saveNewDeviceId(newId)
+                            saveManuallyEditedId(newId)
                             showEditDialog = false
                         }
                     )
@@ -137,85 +111,44 @@ class ChildDashboardActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // 🟢 3. Unregister to prevent memory leaks
         unregisterReceiver(consoleReceiver)
         super.onDestroy()
     }
 
-    // --- LOGIC ---
+    // --- LOGIC (Delegated to Repositories) ---
 
-    private fun loadDeviceInfo() {
-        val prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
-        val localId = prefs.getString("device_id", "NOT_SET") ?: "NOT_SET"
+    private fun initializeDeviceIdentity() {
+        val uid = AuthRepository.getUserId() ?: return
+        UserRepository.initializeDeviceId(this, uid) { id ->
+            deviceId.value = id
+        }
+    }
 
-        val uid = auth.currentUser?.uid ?: return
+    private fun saveManuallyEditedId(newId: String) {
+        val uid = AuthRepository.getUserId() ?: return
 
-        // Check Cloud first
-        db.collection("users").document(uid).get().addOnSuccessListener { doc ->
-            val cloudId = doc.getString("device_id")
-
-            if (!cloudId.isNullOrEmpty()) {
-                // Cloud has it, use it!
-                saveLocalDeviceId(cloudId)
-            } else if (localId != "NOT_SET") {
-                // Cloud is empty but local has one, upload local to Cloud
-                db.collection("users").document(uid).update("device_id", localId)
-                deviceId.value = localId
+        UserRepository.updateDeviceId(this, uid, newId) { success ->
+            if (success) {
+                deviceId.value = newId
+                addToConsole("Configuration: ID manually updated to $newId")
             } else {
-                // Both are empty, generate a brand new one
-                val newId = (100000..999999).random().toString()
-                saveNewDeviceId(newId)
+                Toast.makeText(this, "Failed to update ID", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // Helper to update UI and Local Prefs without infinite loops
-    private fun saveLocalDeviceId(id: String) {
-        getSharedPreferences("AppConfig", MODE_PRIVATE).edit {
-            putString("device_id", id)
-        }
-        deviceId.value = id
-    }
-
-    /**
-     * PERSISTENCE LOGIC:
-     * Saves the new Device ID to storage.
-     */
-    // Sync to cloud when manually edited
-    private fun saveNewDeviceId(newId: String) {
-        if (newId.isBlank()) return
-        val uid = auth.currentUser?.uid ?: return
-
-        saveLocalDeviceId(newId)
-
-        // Push to cloud
-        db.collection("users").document(uid).update("device_id", newId)
-        sendConsoleUpdate("Configuration: Device ID changed to '$newId'")
-    }
-
-    /**
-     * HEALTH CHECK LOGIC:
-     * Queries Android System Managers to see if the app's permissions are still active.
-     */
     private fun performHealthCheck() {
-        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        // Check if our specific Accessibility Service is running.
-        isAccessibilityOn.value = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-            .any { it.resolveInfo.serviceInfo.packageName == packageName }
+        // Uses the internal private SystemHealthManager
+        healthStates["Accessibility"] = SystemHealthManager.isAccessibilityOn(this)
+        healthStates["Notifications"] = SystemHealthManager.isNotificationOn(this)
+        healthStates["Overlay"] = SystemHealthManager.isOverlayOn(this)
+        healthStates["Internet"] = SystemHealthManager.isInternetOn(this)
+        healthStates["Firebase"] = SystemHealthManager.isFirebaseReady(this)
+        healthStates["Capture"] = SystemHealthManager.isScreenCaptureActive()
 
-        isNotificationOn.value = NotificationManagerCompat.from(this).areNotificationsEnabled()
-        isOverlayOn.value = Settings.canDrawOverlays(this)
-
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        isInternetOn.value = cm.activeNetworkInfo?.isConnected == true
-        isFirebaseReady.value = FirebaseApp.getApps(this).isNotEmpty()
-        isScreenCaptureActive.value = ScreenCaptureService.CaptureState.isRunning
+        isReady.value = healthStates.values.all { it }
     }
 
-    /**
-     * NAVIGATION LOGIC:
-     * Creates intents to open specific pages in the Android System Settings.
-     */
     private fun navigateToSetting(label: String) {
         val intent = when (label) {
             "Accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
@@ -230,30 +163,29 @@ class ChildDashboardActivity : ComponentActivity() {
 
     private fun triggerSync() {
         FirebaseSyncManager.syncPendingLogs(this)
-        sendConsoleUpdate("Sync Event: Cloud synchronization completed.")
+        addToConsole("Sync Event: Manual cloud synchronization triggered.")
     }
 
     private fun addToConsole(message: String) {
         val timestamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         consoleLogs.add(0, "[$timestamp] $message")
-
-        // Keep only the last 50 logs to save memory
         if (consoleLogs.size > 50) consoleLogs.removeAt(50)
     }
 
-
     /**
-     * LOGOUT LOGIC:
-     * Removes the 'role' but KEEPS the 'device_id'.
-     * This allows the child to log back in as a child without needing to be re-linked
-     * to the parent device.
+     * DEBUG: Clears only the role, allowing you to switch to Parent/Child
+     * without losing the Device ID or signing out.
      */
-    private fun performLogout() {
-        getSharedPreferences("AppConfig", MODE_PRIVATE).edit {
-            remove("role") // Keep the device_id in prefs!
-        }
-        auth.signOut()
+    private fun debugResetRole() {
+        UserRepository.clearLocalRole(this)
         startActivity(Intent(this, RoleSelectionActivity::class.java))
+        finish()
+    }
+
+    private fun performLogout() {
+        UserRepository.clearLocalRole(this)
+        AuthRepository.logout(this)
+        startActivity(Intent(this, SignInActivity::class.java))
         finish()
     }
 
@@ -263,7 +195,7 @@ class ChildDashboardActivity : ComponentActivity() {
     }
 }
 
-// --- MAIN SCREEN ---
+// --- COMPOSE UI COMPONENTS ---
 
 @Composable
 fun ChildDashboardScreen(
@@ -275,8 +207,9 @@ fun ChildDashboardScreen(
     onForceSync: () -> Unit,
     onLogout: () -> Unit,
     onExit: () -> Unit,
-    onEditIdClick: () -> Unit
-) {
+    onEditIdClick: () -> Unit,
+    onDebugResetRole: () -> Unit
+)  {
     Scaffold(
         containerColor = AppTheme.Background,
         bottomBar = { StickyExitButton(onExit) }
@@ -291,25 +224,25 @@ fun ChildDashboardScreen(
         ) {
             Text("Child Dashboard", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
 
-            // Status Section
             ReadyBanner(visible = isReady)
-            ChildHeader(deviceId, onEditIdClick) // 🟢 Pass click handler
-
-            // Connected Devices
+            ChildHeader(deviceId, onEditIdClick)
             ConnectedDevicesCard()
-
-            // Health & Activity
             HealthCheckSection(checks, onFixPermission)
             ActivityConsole(consoleLogs)
-
-            // Bottom Actions
             ActionRow(onForceSync, onLogout)
             Spacer(Modifier.height(24.dp))
+
+            // 🟢 Debug Section
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            TextButton(
+                onClick = onDebugResetRole,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Debug: Log Out of Role (Keep ID)", color = Color.Gray)
+            }
         }
     }
 }
-
-// --- COMPONENT FUNCTIONS ---
 
 @Composable
 fun ReadyBanner(visible: Boolean) {
@@ -341,10 +274,8 @@ fun ChildHeader(deviceId: String, onEditClick: () -> Unit) {
             }
             Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
                 Text("My Device ID", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                // 🟢 Header Text
                 Text(deviceId, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)
             }
-            // 🟢 Edit Button
             IconButton(onClick = onEditClick) {
                 Icon(Icons.Default.Edit, "Edit ID", tint = AppTheme.Primary)
             }
@@ -491,22 +422,63 @@ fun EditDeviceIdDialog(currentId: String, onDismiss: () -> Unit, onConfirm: (Str
     )
 }
 
-// --- PREVIEWS ---
+/**
+ * Private Manager: Only accessible within this file.
+ */
+private object SystemHealthManager {
+    fun isAccessibilityOn(context: Context): Boolean {
+        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
+        return am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            .any { it.resolveInfo.serviceInfo.packageName == context.packageName }
+    }
 
-@Preview(showBackground = true, showSystemUi = true)
+    fun isNotificationOn(context: Context): Boolean =
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    fun isOverlayOn(context: Context): Boolean = Settings.canDrawOverlays(context)
+
+    fun isInternetOn(context: Context): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        @Suppress("DEPRECATION")
+        return cm.activeNetworkInfo?.isConnected == true
+    }
+
+    fun isFirebaseReady(context: Context): Boolean = FirebaseApp.getApps(context).isNotEmpty()
+
+    fun isScreenCaptureActive(): Boolean = ScreenCaptureService.CaptureState.isRunning
+}
+
+@Preview(showBackground = true, showSystemUi = true, device = "id:pixel_6")
 @Composable
 fun ChildDashboardPreview() {
-    MaterialTheme {
-        ChildDashboardScreen(
-            deviceId = "A7-9B2-C4",
-            consoleLogs = listOf("[10:00:01] App Event: Facebook OPENED"),
-            isReady = false,
-            checks = mapOf("Accessibility" to true, "Notifications" to true),
-            onFixPermission = {},
-            onForceSync = {},
-            onLogout = {},
-            onExit = {},
-            onEditIdClick = {}
-        )
-    }
+    // Mock data for health checks
+    val mockChecks = mapOf(
+        "Accessibility" to true,
+        "Notifications" to true,
+        "Overlay" to false,
+        "Internet" to true,
+        "Firebase" to true,
+        "Capture" to false
+    )
+
+    // Mock console logs
+    val mockLogs = listOf(
+        "[22:15:01] System Initialized.",
+        "[22:15:05] App Event: Messenger OPENED",
+        "[22:15:10] Sync Event: Local logs cleared.",
+        "[22:15:12] Monitoring: Keylog intercepted."
+    )
+
+    ChildDashboardScreen(
+        deviceId = "882-149",
+        consoleLogs = mockLogs,
+        isReady = false, // Set to false to see health badges in different states
+        checks = mockChecks,
+        onFixPermission = {},
+        onForceSync = {},
+        onLogout = {},
+        onExit = {},
+        onEditIdClick = {},
+        onDebugResetRole = {}
+    )
 }

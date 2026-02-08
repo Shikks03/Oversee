@@ -16,105 +16,99 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.edit
-import com.example.prototype.ui.parent.ParentDashboardActivity
-import com.example.prototype.ui.theme.AppTheme
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
-// In LoginActivity.kt
-class LoginActivity : ComponentActivity() {
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
+import com.example.prototype.data.AuthRepository
+import com.example.prototype.data.UserRepository
+import com.example.prototype.ui.theme.AppTheme
+
+
+// In SignInActivity.kt
+class SignInActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
 
         // 1. AUTO-LOGIN CHECK: If Firebase user exists, skip login
-        if (auth.currentUser != null) {
-            syncCloudDataAndNavigate()
+        if (AuthRepository.isUserLoggedIn()) {
+            val uid = AuthRepository.getUserId()
+            if (uid != null) {
+                // Ensure local data is fresh before entering
+                UserRepository.refreshLocalProfile(this, uid) {
+                    navigateToRoleSelection()
+                }
+            }
             return
         }
 
         setContent {
             MaterialTheme {
-                LoginScreen(
-                    onLogin = { email, pass -> loginUser(email, pass) },
-                    onSignUpClick = { startActivity(Intent(this, SignupActivity::class.java)) }
+                SignInScreen(
+                    onSignIn = { email, pass -> performSignIn(email, pass) },
+                    onSignUpClick = { startActivity(Intent(this, SignUpActivity::class.java)) }
                 )
             }
         }
     }
 
-    private fun loginUser(email: String, pass: String) {
-        auth.signInWithEmailAndPassword(email.trim(), pass.trim())
-            .addOnSuccessListener { result ->
-                val uid = result.user?.uid ?: return@addOnSuccessListener
+    private fun performSignIn(email: String, pass: String) {
+        if (email.isBlank() || pass.isBlank()) {
+            Toast.makeText(this, "Please enter email and password", Toast.LENGTH_SHORT).show()
+            return
+        }
 
-                db.collection("users").document(uid).get()
-                    .addOnSuccessListener { document ->
-                        val linkedId = document.getString("linked_child_id") ?: "NOT_LINKED"
-
-                        getSharedPreferences("AppConfig", MODE_PRIVATE).edit {
-                            putString("target_id", linkedId)
-                        }
-                        navigateToRoleSelection()
-                    }
-                    .addOnFailureListener {
-                        navigateToRoleSelection()
-                    }
-            }
-            .addOnFailureListener { e ->
-                Toast.makeText(this, "Login Failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    /**
-     * 🟢 SLAPPED FUNCTION: Fetches the IDs from Firestore so they are
-     * remembered immediately after login.
-     */
-    private fun syncCloudDataAndNavigate() {
-        val uid = auth.currentUser?.uid ?: return
-
-        db.collection("users").document(uid).get()
-            .addOnSuccessListener { document ->
-                if (document.exists()) {
-                    val prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
-
-                    val cloudChildId = document.getString("device_id") ?: ""
-                    val cloudLinkedId = document.getString("linked_child_id") ?: ""
-
-                    prefs.edit {
-                        // Restore Child Device ID if it exists in cloud
-                        if (cloudChildId.isNotEmpty()) putString("device_id", cloudChildId)
-                        // Restore Parent's Link if it exists in cloud
-                        if (cloudLinkedId.isNotEmpty()) putString("target_id", cloudLinkedId)
-                    }
-                }
+        AuthRepository.signIn(this, email, pass) { success, error ->
+            if (success) {
                 navigateToRoleSelection()
+            } else {
+                Toast.makeText(this, "Sign In Failed: $error", Toast.LENGTH_SHORT).show()
             }
-            .addOnFailureListener {
-                // Even if sync fails, proceed to role selection
-                navigateToRoleSelection()
-            }
+        }
     }
 
     private fun navigateToRoleSelection() {
         startActivity(Intent(this, RoleSelectionActivity::class.java))
-        finish() // Close login so back button exits app
+        finish()
     }
+
+//    /**
+//     * 🟢 SLAPPED FUNCTION: Fetches the IDs from Firestore so they are
+//     * remembered immediately after login.
+//     */
+//    private fun syncCloudDataAndNavigate() {
+//        val uid = auth.currentUser?.uid ?: return
+//
+//        db.collection("users").document(uid).get()
+//            .addOnSuccessListener { document ->
+//                if (document.exists()) {
+//                    val prefs = getSharedPreferences("AppConfig", MODE_PRIVATE)
+//
+//                    val cloudChildId = document.getString("device_id") ?: ""
+//                    val cloudLinkedId = document.getString("linked_child_id") ?: ""
+//
+//                    prefs.edit {
+//                        // Restore Child Device ID if it exists in cloud
+//                        if (cloudChildId.isNotEmpty()) putString("device_id", cloudChildId)
+//                        // Restore Parent's Link if it exists in cloud
+//                        if (cloudLinkedId.isNotEmpty()) putString("target_id", cloudLinkedId)
+//                    }
+//                }
+//                navigateToRoleSelection()
+//            }
+//            .addOnFailureListener {
+//                // Even if sync fails, proceed to role selection
+//                navigateToRoleSelection()
+//            }
+//    }
 }
 
 @Composable
-fun LoginScreen(onLogin: (String, String) -> Unit, onSignUpClick: () -> Unit) {
+fun SignInScreen(onSignIn: (String, String) -> Unit, onSignUpClick: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
@@ -124,7 +118,7 @@ fun LoginScreen(onLogin: (String, String) -> Unit, onSignUpClick: () -> Unit) {
                 modifier = Modifier.size(150.dp),
                 imageVector = Icons.Default.VerifiedUser,
                 contentDescription = "OverSee Icon",
-                tint = AppTheme.Surface // Or any color from your theme
+                tint = AppTheme.Surface
             )
             Text("Welcome!", Modifier.padding(36.dp), style = AppTheme.TitlePageStyle, color = AppTheme.Surface, textAlign = TextAlign.Center)
             Card(
@@ -152,7 +146,7 @@ fun LoginScreen(onLogin: (String, String) -> Unit, onSignUpClick: () -> Unit) {
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Button(
-                        onClick = { onLogin(email, password) },
+                        onClick = { onSignIn(email, password) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary)
                     ) {
@@ -171,15 +165,8 @@ fun LoginScreen(onLogin: (String, String) -> Unit, onSignUpClick: () -> Unit) {
 
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
-fun LoginScreenPreview() {
+fun SignInScreenPreview() {
     MaterialTheme {
-        LoginScreen(
-            onLogin = { email, password ->
-                // This block is empty for the preview
-            },
-            onSignUpClick = {
-                // This block is empty for the preview
-            }
-        )
+        SignInScreen({ _, _ -> }, {})
     }
 }

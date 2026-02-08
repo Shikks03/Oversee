@@ -3,36 +3,38 @@ package com.example.prototype.data
 import android.content.Context
 import com.example.prototype.data.local.LocalStorageManager
 import com.example.prototype.data.model.Incident
+import com.example.prototype.data.remote.FirebaseIncidentManager
 import com.example.prototype.data.remote.FirebaseSyncManager
 
 /**
- * The Single Source of Truth for Incident Data.
- *
- * This Repository Pattern abstracts the data sources (File vs Firebase)
- * from the rest of the application. The UI and Services talk ONLY to this class.
+ * Coordinates incident logging and data fetching.
  */
 object IncidentRepository {
 
-    /**
-     * Saves a new incident.
-     *
-     * Strategy:
-     * 1. Always save to local storage immediately for offline resilience.
-     * 2. If the severity is HIGH, trigger an immediate "Emergency Sync" to the cloud.
-     */
+    // Save logic for Child device
     fun saveIncident(context: Context, incident: Incident) {
-        // 1. Local Persistence (Primary)
-        LocalStorageManager.logIncident(
-            context,
-            incident.word,
-            incident.severity,
-            incident.appName
-        )
+        LocalStorageManager.logIncident(context, incident.word, incident.severity, incident.appName)
 
-        // 2. Business Rule: Critical Alert Logic
+        // Critical alerts sync immediately
         if (incident.severity == "HIGH") {
-            // Trigger background upload immediately
             FirebaseSyncManager.syncPendingLogs(context)
+        }
+    }
+
+    // Fetch logic for Parent device
+    fun fetchRecentIncidents(
+        childId: String,
+        onSuccess: (List<FirebaseSyncManager.LogEntry>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (childId == "NOT_LINKED" || childId.isBlank()) {
+            onSuccess(emptyList())
+            return
+        }
+
+        FirebaseIncidentManager.fetchIncidents(childId) { list, error ->
+            if (list != null) onSuccess(list)
+            else onError(error ?: "Unknown error")
         }
     }
 
