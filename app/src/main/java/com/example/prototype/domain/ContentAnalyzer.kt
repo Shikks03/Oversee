@@ -10,7 +10,21 @@ object ContentAnalyzer {
         "idiot" to "LOW",
         "scam" to "MEDIUM",
         "kill" to "HIGH",
-        "die" to "HIGH"
+        "die" to "HIGH",
+        "pvtangina" to "HIGH",
+        "bobo" to "MEDIUM",
+        "burikat" to "MEDIUM",
+        "bangag ka ba?!" to "HIGH",
+        "bugak!!" to "HIGH",
+        "gago" to "HIGH",
+        "8080" to "MEDIUM",
+        "@mputa!" to "HIGH",
+        "moron" to "MEDIUM",
+        "baliw" to "LOW",
+        "stp1d!" to "MEDIUM",
+        "m0r0n" to "MEDIUM",
+        "imb€cil€" to "MEDIUM",
+        "stup1d" to "LOW"
     )
 
     data class Incident(

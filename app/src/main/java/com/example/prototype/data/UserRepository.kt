@@ -100,6 +100,7 @@ object UserRepository {
     fun clearLocalRole(context: Context) {
         // Child logout often keeps the device_id but removes the role
         AppPreferenceManager.saveString(context, "role", "NOT_SET")
+//        FirebaseUserManager.updateProfileField(uid, "role", "NOT_SET")
     }
 
     fun clearLocalData(context: Context) {

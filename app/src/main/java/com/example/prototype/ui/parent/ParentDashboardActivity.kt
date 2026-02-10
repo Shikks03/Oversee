@@ -596,6 +596,8 @@ fun LinkDeviceSetupScreen(
     }
 }
 
+
+
 @Composable
 fun ParentBottomNavigation(onSettingsClick: () -> Unit) {
     NavigationBar(containerColor = AppTheme.Surface) {

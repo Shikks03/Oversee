@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 
@@ -56,6 +58,8 @@ class ChildDashboardActivity : ComponentActivity() {
     private var healthStates = mutableStateMapOf<String, Boolean>()
     private var isReady = mutableStateOf(false)
 
+    private var isDeviceLinked = mutableStateOf(false)
+
     private val consoleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             intent?.getStringExtra("message")?.let { addToConsole(it) }
@@ -74,33 +78,63 @@ class ChildDashboardActivity : ComponentActivity() {
         performHealthCheck()
         addToConsole("System Initialized.")
 
+        val savedTargetId = UserRepository.getLocalTargetId(this)
+        isDeviceLinked.value = (savedTargetId != "NOT_LINKED")
+
         setContent {
             MaterialTheme {
                 var showEditDialog by remember { mutableStateOf(false) }
 
-                ChildDashboardScreen(
-                    deviceId = deviceId.value,
-                    consoleLogs = consoleLogs,
-                    isReady = isReady.value,
-                    checks = healthStates,
-                    onFixPermission = { label -> navigateToSetting(label) },
-                    onForceSync = { triggerSync() },
-                    onLogout = { performLogout() },
-                    onExit = { killApp() },
-                    onEditIdClick = { showEditDialog = true },
-                    onDebugResetRole = { debugResetRole() }
-                )
-
-                if (showEditDialog) {
-                    EditDeviceIdDialog(
-                        currentId = deviceId.value,
-                        onDismiss = { showEditDialog = false },
-                        onConfirm = { newId ->
-                            saveManuallyEditedId(newId)
-                            showEditDialog = false
-                        }
+                if (!isDeviceLinked.value) {
+                    // STAGE 1: LINK SETUP
+                    ChildLinkSetupScreen(
+                        deviceId = deviceId.value,
+                        onLinkConfirmed = {
+                            val currentId = UserRepository.getLocalTargetId(this)
+//                            if (currentId != "NOT_LINKED") {
+//                                isDeviceLinked.value = true
+//                            } else {
+//                                Toast.makeText(this, "Wait for parent to link first!", Toast.LENGTH_SHORT).show()
+//                            }
+                            isDeviceLinked.value = true
+                        },
+                        onLogout = { performLogout() }
                     )
                 }
+                else if (!isReady.value) {
+                    // STAGE 2: PERMISSIONS SETUP (Blocking)
+                    PermissionsSetupScreen(
+                        checks = healthStates,
+                        onFixPermission = { label -> navigateToSetting(label) },
+                        onCheckAgain = { performHealthCheck() }
+                    )
+                }
+                else {
+                    // STAGE 3: DASHBOARD
+                    ChildDashboardScreen(
+                        deviceId = deviceId.value,
+                        consoleLogs = consoleLogs,
+                        isReady = isReady.value,
+                        checks = healthStates,
+                        onFixPermission = { label -> navigateToSetting(label) },
+                        onForceSync = { triggerSync() },
+                        onLogout = { performLogout() },
+                        onExit = { killApp() },
+                        onEditIdClick = { showEditDialog = true },
+                        onDebugResetRole = { debugResetRole() }
+                    )
+                    if (showEditDialog) {
+                        EditDeviceIdDialog(
+                            currentId = deviceId.value,
+                            onDismiss = { showEditDialog = false },
+                            onConfirm = { newId ->
+                                saveManuallyEditedId(newId)
+                                showEditDialog = false
+                            }
+                        )
+                    }
+                }
+
             }
         }
     }
@@ -146,7 +180,10 @@ class ChildDashboardActivity : ComponentActivity() {
         healthStates["Firebase"] = SystemHealthManager.isFirebaseReady(this)
         healthStates["Capture"] = SystemHealthManager.isScreenCaptureActive()
 
-        isReady.value = healthStates.values.all { it }
+        // 🟢 FIX: Only block the screen if Mandatory Permissions are missing.
+        // We don't care about Internet or Capture status for the *Initial Setup* flow.
+        isReady.value = healthStates["Accessibility"] == true &&
+                healthStates["Overlay"] == true
     }
 
     private fun navigateToSetting(label: String) {
@@ -422,6 +459,154 @@ fun EditDeviceIdDialog(currentId: String, onDismiss: () -> Unit, onConfirm: (Str
     )
 }
 
+@Composable
+fun ChildLinkSetupScreen(
+    deviceId: String,
+    onLinkConfirmed: () -> Unit,
+    onLogout: () -> Unit
+) {
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.Surface)
+            .padding(57.dp, 103.dp, 57.dp, 103.dp), // Matches Role Selection padding
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // --- TOP SECTION ---
+            Column(verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top)) {
+                Icon(
+                    modifier = Modifier.size(88.dp),
+                    imageVector = Icons.Default.QrCode, // Changed icon to represent ID/Code
+                    contentDescription = null,
+                    tint = AppTheme.Success // Green color for Child UI
+                )
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "Your Device ID",
+                    style = AppTheme.TitlePageStyle,
+                    textAlign = TextAlign.Left
+                )
+                Text(
+                    text = "Share this code with your parent to link this device.",
+                    style = AppTheme.BodyBase,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(60.dp))
+
+            // --- CENTER SECTION (ID Display) ---
+            Column(
+                modifier = Modifier.width(280.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(40.dp, Alignment.Top)
+            ) {
+                // ID Display Card
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = AppTheme.Background),
+                    border = BorderStroke(2.dp, AppTheme.Success),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        // Copy to clipboard logic
+                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(deviceId))
+                        Toast.makeText(context, "ID Copied!", Toast.LENGTH_SHORT).show()
+                    }
+                ) {
+                    Column(
+                        Modifier.padding(vertical = 24.dp, horizontal = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = deviceId.chunked(3).joinToString("-"), // Formats 123456 -> 123-456
+                            fontSize = 40.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 4.sp,
+                            color = AppTheme.Success,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "TAP TO COPY",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                // Confirm Button
+                Button(
+                    onClick = onLinkConfirmed,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Success),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = ButtonDefaults.buttonElevation(4.dp)
+                ) {
+                    Text("I'VE BEEN LINKED", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // --- BOTTOM SECTION ---
+            TextButton(onClick = onLogout) {
+                Text(
+                    text = "Switch Account / Logout",
+                    style = AppTheme.BodyBase,
+                    textDecoration = TextDecoration.Underline,
+                    color = Color.Gray
+                )
+            }
+        }
+    }
+}
+// PERMISSIONS SETUP SCREEN
+@Composable
+fun PermissionsSetupScreen(checks: Map<String, Boolean>, onFixPermission: (String) -> Unit, onCheckAgain: () -> Unit) {
+    val allGood = checks["Accessibility"] == true && checks["Overlay"] == true
+
+    Box(Modifier.fillMaxSize().background(AppTheme.Surface).padding(24.dp)) {
+        Column(Modifier.fillMaxHeight().padding(top = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Icon(Icons.Default.Settings, null, Modifier.size(64.dp), tint = AppTheme.Primary)
+            Text("Required Permissions", style = AppTheme.TitlePageStyle)
+            Text("OverSee needs these permissions to detect dangerous content.", style = AppTheme.BodyBase, textAlign = TextAlign.Center, color = Color.Gray)
+
+            Spacer(Modifier.height(16.dp))
+
+            PermissionItem("Accessibility", "To detect dangerous content", checks["Accessibility"] == true) { onFixPermission("Accessibility") }
+            PermissionItem("Display Overlay", "To show alert popups", checks["Overlay"] == true) { onFixPermission("Overlay") }
+//            PermissionItem("Usage Access", "To track app time limits", checks["Usage"] == true) { onFixPermission("Usage") }
+
+            Spacer(Modifier.weight(1f))
+
+            Button(onClick = onCheckAgain, enabled = allGood, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = if(allGood) AppTheme.Success else Color.Gray), shape = RoundedCornerShape(12.dp)) {
+                Text(if (allGood) "START MONITORING" else "COMPLETE SETUP", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+fun PermissionItem(title: String, desc: String, isGranted: Boolean, onClick: () -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = if (isGranted) Color(0xFFE8F5E9) else AppTheme.Background), shape = RoundedCornerShape(12.dp), onClick = { if (!isGranted) onClick() }, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(desc, fontSize = 12.sp, color = Color.Gray)
+            }
+            if (isGranted) Icon(Icons.Default.CheckCircle, null, tint = AppTheme.Success)
+            else Button(onClick = onClick, Modifier.height(36.dp), colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary)) { Text("Enable", fontSize = 12.sp) }
+        }
+    }
+}
+
 /**
  * Private Manager: Only accessible within this file.
  */
@@ -480,5 +665,26 @@ fun ChildDashboardPreview() {
         onExit = {},
         onEditIdClick = {},
         onDebugResetRole = {}
+    )
+}
+
+@Preview(showBackground = true, showSystemUi = true, device = "id:pixel_6")
+@Composable
+fun ChildLinkSetupPreview() {
+    ChildLinkSetupScreen(
+        deviceId = "882149",
+        onLinkConfirmed = {},
+        onLogout = {}
+    )
+
+}
+
+@Preview(showBackground = true, showSystemUi = true, device = "id:pixel_6")
+@Composable
+fun PermissionsSetupPreview() {
+    PermissionsSetupScreen(
+        checks = mapOf("Accessibility" to true, "Overlay" to false, "Usage" to false),
+        onFixPermission = {},
+        onCheckAgain = {}
     )
 }
