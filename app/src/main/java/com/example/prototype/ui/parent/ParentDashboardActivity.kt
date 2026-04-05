@@ -184,6 +184,7 @@ class ParentDashboardActivity : ComponentActivity() {
 
         // 🟢 Repository Call: Fetches logs cleanly
         IncidentRepository.fetchRecentIncidents(
+            context = this,
             childId = target,
             onSuccess = { logs ->
                 isLoading.value = false
@@ -243,6 +244,7 @@ class ParentDashboardActivity : ComponentActivity() {
         isRefreshing.value = true
         // 🟢 Repository Call: Fetch from cloud
         IncidentRepository.fetchRecentIncidents(
+            context = this,
             childId = currentTargetId.value,
             onSuccess = { logs ->
                 incidentList.clear()

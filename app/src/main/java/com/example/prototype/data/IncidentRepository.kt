@@ -23,6 +23,7 @@ object IncidentRepository {
 
     // Fetch logic for Parent device
     fun fetchRecentIncidents(
+        context: Context,
         childId: String,
         onSuccess: (List<FirebaseSyncManager.LogEntry>) -> Unit,
         onError: (String) -> Unit
@@ -32,7 +33,7 @@ object IncidentRepository {
             return
         }
 
-        FirebaseIncidentManager.fetchIncidents(childId) { list, error ->
+        FirebaseIncidentManager.fetchIncidents(context, childId) { list, error ->
             if (list != null) onSuccess(list)
             else onError(error ?: "Unknown error")
         }
