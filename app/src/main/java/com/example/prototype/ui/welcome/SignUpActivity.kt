@@ -53,6 +53,10 @@ class SignUpActivity : ComponentActivity() {
             Toast.makeText(this, "Please fill all fields", Toast.LENGTH_SHORT).show()
             return
         }
+        if (!email.endsWith("@gmail.com")) {
+            Toast.makeText(this, "Email must end with @gmail.com", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         AuthRepository.register(this, name, email, pass) { success, error ->
             if (success) {
