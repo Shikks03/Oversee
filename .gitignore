@@ -13,3 +13,19 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# AI
+.claude/
+.ai/
+CLAUDE.md
+GEMINI.md
+AGENTS.md
+.cursorrules
+.cursorignore
+copilot-instructions.md
+.github/copilot-instructions.md
+.aider*
+.continue/
+.codeium/
+.windsurf/
+.bolt/
