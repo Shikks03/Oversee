@@ -74,6 +74,7 @@ class ScreenCaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         prepareTesseract() // Copy assets first
+        ContentAnalyzer.init(this)
         tess = TessBaseAPI().apply {
             init(filesDir.absolutePath, "eng")
         }

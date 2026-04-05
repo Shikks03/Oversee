@@ -1,31 +1,24 @@
 package com.example.prototype.domain
 
+import android.content.Context
 import java.util.Locale
 
 object ContentAnalyzer {
 
-    // Map Word -> Severity
-    private val WORD_DB = mapOf(
-        "stupid" to "LOW",
-        "idiot" to "LOW",
-        "scam" to "MEDIUM",
-        "kill" to "HIGH",
-        "die" to "HIGH",
-        "pvtangina" to "HIGH",
-        "bobo" to "MEDIUM",
-        "burikat" to "MEDIUM",
-        "bangag ka ba?!" to "HIGH",
-        "bugak!!" to "HIGH",
-        "gago" to "HIGH",
-        "8080" to "MEDIUM",
-        "@mputa!" to "HIGH",
-        "moron" to "MEDIUM",
-        "baliw" to "LOW",
-        "stp1d!" to "MEDIUM",
-        "m0r0n" to "MEDIUM",
-        "imb€cil€" to "MEDIUM",
-        "stup1d" to "LOW"
-    )
+    private var wordSet: Set<String> = emptySet()
+
+    fun init(context: Context) {
+        val words = mutableSetOf<String>()
+        listOf("inappropriate_words_english.txt", "inappropriate_words_tagalog.txt").forEach { filename ->
+            context.assets.open(filename).bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    val word = line.trim().lowercase(Locale.getDefault())
+                    if (word.isNotEmpty()) words.add(word)
+                }
+            }
+        }
+        wordSet = words
+    }
 
     data class Incident(
         val word: String,
@@ -48,9 +41,8 @@ object ContentAnalyzer {
         val foundIncidents = mutableListOf<Incident>()
 
         for (token in tokens) {
-            if (WORD_DB.containsKey(token)) {
-                val severity = WORD_DB[token] ?: "LOW"
-                foundIncidents.add(Incident(token, severity))
+            if (wordSet.contains(token)) {
+                foundIncidents.add(Incident(token, "HIGH"))
             }
         }
 
