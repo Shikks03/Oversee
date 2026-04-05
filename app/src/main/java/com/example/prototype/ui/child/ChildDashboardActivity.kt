@@ -436,23 +436,27 @@ fun StickyExitButton(onExit: () -> Unit) {
 @Composable
 fun EditDeviceIdDialog(currentId: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var text by remember { mutableStateOf(currentId) }
+    val isValid = text.length == 9 && text.all { it.isDigit() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Change Device ID") },
         text = {
             Column {
-                Text("Enter a unique name or code for this device:", fontSize = 13.sp, color = Color.Gray)
+                Text("Enter a 9-digit number for this device:", fontSize = 13.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = { if (it.length <= 9 && it.all { c -> c.isDigit() }) text = it },
                     singleLine = true,
-                    label = { Text("Device ID") }
+                    label = { Text("Device ID") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    isError = text.isNotEmpty() && !isValid,
+                    supportingText = { Text("${text.length}/9 digits") }
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(text) }) { Text("Save") }
+            Button(onClick = { onConfirm(text) }, enabled = isValid) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

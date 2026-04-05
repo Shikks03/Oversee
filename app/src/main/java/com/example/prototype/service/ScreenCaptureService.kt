@@ -76,7 +76,8 @@ class ScreenCaptureService : Service() {
         prepareTesseract() // Copy assets first
         ContentAnalyzer.init(this)
         tess = TessBaseAPI().apply {
-            init(filesDir.absolutePath, "eng")
+            init(filesDir.absolutePath, "eng", TessBaseAPI.OEM_DEFAULT)
+            pageSegMode = TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
         }
     }
 
@@ -183,15 +184,27 @@ class ScreenCaptureService : Service() {
         try {
             val startTime = System.currentTimeMillis()
 
-            // 1. Optimization: Scale down to improve speed
+            // 1. Scale down to 50% and convert to grayscale for faster OCR
             val scaled = bitmap.scale(bitmap.width / 2, bitmap.height / 2, false)
+            val grayscale = Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888).also { bw ->
+                val canvas = android.graphics.Canvas(bw)
+                val paint = android.graphics.Paint().apply {
+                    colorFilter = android.graphics.ColorMatrixColorFilter(
+                        android.graphics.ColorMatrix().also { it.setSaturation(0f) }
+                    )
+                }
+                canvas.drawBitmap(scaled, 0f, 0f, paint)
+            }
+            scaled.recycle()
             Log.d(TAG, "OCR Processing Cycle #$id")
             // 2. Process Image
-            api.setImage(scaled)
+            api.setImage(grayscale)
             val text = api.utF8Text
-            scaled.recycle() // Free memory immediately
+            grayscale.recycle() // Free memory immediately
 
             val duration = System.currentTimeMillis() - startTime
+            Log.d(TAG, "OCR Cycle #$id processed in ${duration}ms")
+            sendConsoleUpdate("OCR Cycle #$id processed in ${duration}ms")
 
             if (!text.isNullOrBlank()) {
                 // 3. Analyze text for inappropriate words

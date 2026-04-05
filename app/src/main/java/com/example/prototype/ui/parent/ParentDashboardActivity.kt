@@ -554,8 +554,7 @@ fun LinkDeviceSetupScreen(
                 OutlinedTextField(
                     value = childIdInput,
                     onValueChange = { input ->
-                        // 🟢 1. Only allow digits AND 2. Limit length to 6
-                        if (input.all { it.isDigit() } && input.length <= 6) {
+                        if (input.all { it.isDigit() } && input.length <= 9) {
                             childIdInput = input
                         }
                     },
@@ -577,7 +576,7 @@ fun LinkDeviceSetupScreen(
 
                 // Confirm Button (Styled like your RoleButton)
                 Button(
-                    onClick = { if (childIdInput.isNotEmpty()) onLinkConfirmed(childIdInput) },
+                    onClick = { if (childIdInput.length == 9) onLinkConfirmed(childIdInput) },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary),
                     shape = RoundedCornerShape(12.dp)
