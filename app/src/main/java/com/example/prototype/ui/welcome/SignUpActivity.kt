@@ -9,6 +9,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -79,7 +81,10 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
             .background(AppTheme.SecBackground), // Matches Login Blue
         contentAlignment = Alignment.BottomCenter
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            modifier = Modifier.verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
 
             // 2. Logo & Header (Matches Login)
             Icon(
@@ -99,7 +104,7 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
             ) {
                 Column(
                     // Reduced top padding slightly (71dp -> 40dp) to fit the extra field comfortably
-                    modifier = Modifier.padding(start = 57.dp, top = 64.dp, end = 57.dp, bottom = 100.dp),
+                    modifier = Modifier.padding(start = 57.dp, top = 64.dp, end = 57.dp, bottom = 40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(30.dp)
                 ) {
