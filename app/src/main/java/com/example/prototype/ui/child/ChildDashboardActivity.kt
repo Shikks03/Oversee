@@ -527,11 +527,17 @@ fun ChildLinkSetupScreen(
                         Modifier.padding(vertical = 24.dp, horizontal = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        val displayId = if (deviceId.all { it.isDigit() }) deviceId.chunked(3).joinToString("-") else deviceId
+                        val idFontSize = when {
+                            displayId.length > 13 -> 22.sp
+                            displayId.length > 10 -> 28.sp
+                            else -> 36.sp
+                        }
                         Text(
-                            text = if (deviceId.all { it.isDigit() }) deviceId.chunked(3).joinToString("-") else deviceId,
-                            fontSize = 40.sp,
+                            text = displayId,
+                            fontSize = idFontSize,
                             fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 4.sp,
+                            letterSpacing = 2.sp,
                             color = AppTheme.Success,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
