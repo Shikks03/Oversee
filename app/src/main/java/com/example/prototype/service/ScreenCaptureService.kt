@@ -48,6 +48,8 @@ class ScreenCaptureService : Service() {
         private const val SYNC_INTERVAL = 28_800_000L // 8 Hours
         private const val CAPTURE_INTERVAL = 3000L    // 3 Seconds
         private const val DEBOUNCE_TIME_MS = 10_000L  // 10 Seconds Debounce
+        private const val CROP_TOP_RATIO = 0.03f      // Status bar only (~72px on 2400px screen)
+        private const val CROP_BOTTOM_RATIO = 0.055f  // Nav bar only (~132px on 2400px screen)
     }
 
     private lateinit var projection: MediaProjection
@@ -77,6 +79,10 @@ class ScreenCaptureService : Service() {
         ContentAnalyzer.init(this)
         tess = TessBaseAPI().apply {
             init(filesDir.absolutePath, "eng")
+            pageSegMode = TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
+            // Only recognize letters and space — eliminates garbage from icons,
+            // emoji, reaction counts, and other Facebook UI elements.
+            setVariable("tessedit_char_whitelist", "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ ")
         }
     }
 
@@ -122,14 +128,16 @@ class ScreenCaptureService : Service() {
         val tessDir = File(filesDir, "tessdata")
         if (!tessDir.exists()) tessDir.mkdirs()
 
-        val jsonData = File(tessDir, "eng.traineddata")
-        if (!jsonData.exists()) {
+        val destFile = File(tessDir, "eng.traineddata")
+        val assetSize = assets.open("tessdata/eng.traineddata").use { it.available().toLong() }
+
+        if (!destFile.exists() || destFile.length() != assetSize) {
             assets.open("tessdata/eng.traineddata").use { input ->
-                jsonData.outputStream().use { output ->
+                destFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
-                Log.d("OCR","prepareTesseract DONE")
             }
+            Log.d("OCR", "prepareTesseract: copied eng.traineddata ($assetSize bytes)")
         }
     }
 
@@ -181,43 +189,50 @@ class ScreenCaptureService : Service() {
         val api = tess ?: return // Ensure Tesseract is ready
 
         try {
-            val startTime = System.currentTimeMillis()
+            val t0 = System.currentTimeMillis()
 
-            // 1. Optimization: Scale down to improve speed
-            val scaled = bitmap.scale(bitmap.width / 2, bitmap.height / 2, false)
-            Log.d(TAG, "OCR Processing Cycle #$id")
-            // 2. Process Image
+            // 1. Crop system bars (status bar top, nav bar bottom) — zero-copy
+            val cropped = cropSystemBars(bitmap)
+            val t1 = System.currentTimeMillis()
+
+            // 2. Scale down 50% (crop-before-scale reduces pixels for the scale op)
+            val scaled = cropped.scale(cropped.width / 2, cropped.height / 2, false)
+            cropped.recycle()
+            val t2 = System.currentTimeMillis()
+
+            // 3. OCR
             api.setImage(scaled)
             val text = api.utF8Text
-            scaled.recycle() // Free memory immediately
+            scaled.recycle()
+            val t3 = System.currentTimeMillis()
 
-            val duration = System.currentTimeMillis() - startTime
+            Log.d(TAG, "OCR #$id: crop=${t1-t0}ms scale=${t2-t1}ms ocr=${t3-t2}ms total=${t3-t0}ms")
+            sendConsoleUpdate("OCR #$id: prep=${t2-t0}ms ocr=${t3-t2}ms total=${t3-t0}ms")
 
             if (!text.isNullOrBlank()) {
-                // 3. Analyze text for inappropriate words
+                // 4. Analyze text for inappropriate words
                 val result = ContentAnalyzer.analyze(text)
 
                 Log.d(TAG, "OCR Text: $text")
                 if (!result.isClean) {
                     result.incidents.forEach { incident ->
 
-                        // 4. Debounce: Check if we've seen this word in the last 10s
+                        // 5. Debounce: Check if we've seen this word in the last 10s
                         val lastSeen = debounceMap[incident.word] ?: 0L
                         val currentTime = System.currentTimeMillis()
 
-                        if (currentTime - lastSeen > 10_000L) { // 10s Debounce
+                        if (currentTime - lastSeen > 10_000L) {
                             debounceMap[incident.word] = currentTime
 
-                            // 5. Save and Sync
-                            // High severity logic is handled inside saveIncident
+                            // 6. Save and Sync
                             IncidentRepository.saveIncident(
                                 applicationContext,
                                 Incident(incident.word, incident.severity, "Facebook")
                             )
 
-                            sendConsoleUpdate("FLAG: '${incident.word}' (${incident.severity}) detected in ${duration}ms")
-                            Log.d(TAG,"FLAG: '${incident.word}' (${incident.severity}) detected in ${duration}ms" )
-                        }else{
+                            sendConsoleUpdate("FLAG: '${incident.word}' (${incident.severity}) in ${t3-t0}ms")
+                            Log.d(TAG, "FLAG: '${incident.word}' (${incident.severity}) in ${t3-t0}ms")
+                        } else {
                             Log.d(TAG, "Debounced ${incident.word}")
                         }
                     }
@@ -227,6 +242,14 @@ class ScreenCaptureService : Service() {
             Log.e("ScreenCapture", "OCR Processing Error", e)
             sendConsoleUpdate("Error: OCR Failed - ${e.message}")
         }
+    }
+
+    private fun cropSystemBars(bitmap: Bitmap): Bitmap {
+        val topCrop = (bitmap.height * CROP_TOP_RATIO).toInt()
+        val bottomCrop = (bitmap.height * CROP_BOTTOM_RATIO).toInt()
+        return Bitmap.createBitmap(
+            bitmap, 0, topCrop, bitmap.width, bitmap.height - topCrop - bottomCrop
+        )
     }
 
     // --- COMPOSE OVERLAY (Click-Through) ---
@@ -283,9 +306,15 @@ class ScreenCaptureService : Service() {
         val pixelStride = plane.pixelStride
         val rowStride = plane.rowStride
         val rowPadding = rowStride - pixelStride * image.width
-        val bitmap = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
-        bitmap.copyPixelsFromBuffer(buffer)
-        return Bitmap.createBitmap(bitmap, 0, 0, image.width, image.height)
+        val padded = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
+        padded.copyPixelsFromBuffer(buffer)
+        // When rowPadding == 0, createBitmap returns padded itself (Android optimization).
+        // Recycling padded in that case would immediately invalidate the returned bitmap.
+        return if (rowPadding == 0) {
+            padded
+        } else {
+            Bitmap.createBitmap(padded, 0, 0, image.width, image.height).also { padded.recycle() }
+        }
     }
 
     private fun createNotification(): Notification {
