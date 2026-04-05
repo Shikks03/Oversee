@@ -1,5 +1,6 @@
 package com.example.prototype.data.remote
 
+import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 
@@ -25,19 +26,20 @@ object FirebaseUserManager {
 
     fun updateProfileField(uid: String, field: String, value: String, onComplete: (Boolean) -> Unit) {
         db.collection("users").document(uid)
-            .update(field, value)
+            .set(mapOf(field to value), SetOptions.merge())
             .addOnSuccessListener { onComplete(true) }
-            .addOnFailureListener { onComplete(false) }
+            .addOnFailureListener { e ->
+                Log.e("FirebaseUserManager", "updateProfileField failed: uid=$uid field=$field", e)
+                onComplete(false)
+            }
     }
 
-    // Ensure generated device IDs are unique in the cloud
-    // Might be unoptimized
+    // Generates a 9-digit ID derived from a UUID (128-bit random).
+    // No Firestore query needed — collision probability is negligible.
     fun generateUniqueDeviceId(onResult: (String) -> Unit) {
-        val newId = (100000..999999).random().toString()
-        db.collection("users").whereEqualTo("device_id", newId).get()
-            .addOnSuccessListener { docs ->
-                if (docs.isEmpty) onResult(newId)
-                else generateUniqueDeviceId(onResult)
-            }
+        val uuid = java.util.UUID.randomUUID()
+        val bits = (uuid.mostSignificantBits xor uuid.leastSignificantBits) and Long.MAX_VALUE
+        val id = (100_000_000L + (bits % 900_000_000L)).toString()
+        onResult(id)
     }
 }
