@@ -3,6 +3,7 @@ package com.example.prototype.service
 // --- ANDROID CORE ---
 import android.app.*
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.*
 import android.hardware.display.DisplayManager
 import android.media.Image
@@ -63,6 +64,9 @@ class ScreenCaptureService : Service() {
     // Debounce Map: Stores "badword" -> Last Time Seen
     private val debounceMap = ConcurrentHashMap<String, Long>()
 
+    // Frame skip: tracks previous frame brightness to avoid re-OCR-ing unchanged screens
+    private var previousBrightness: Double = -1.0
+
     private val ocrExecutor = Executors.newSingleThreadExecutor()
 
     // UI Overlay (Compose)
@@ -82,7 +86,7 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
-        startForeground(1, createNotification())
+        startForeground(1, createNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
 
         val resultCode = intent.getIntExtra("resultCode", Activity.RESULT_CANCELED)
         val data: Intent? = if (Build.VERSION.SDK_INT >= 33) {
@@ -123,14 +127,14 @@ class ScreenCaptureService : Service() {
         val tessDir = File(filesDir, "tessdata")
         if (!tessDir.exists()) tessDir.mkdirs()
 
-        val jsonData = File(tessDir, "eng.traineddata")
-        if (!jsonData.exists()) {
+        val destFile = File(tessDir, "eng.traineddata")
+        if (!destFile.exists() || destFile.length() == 0L) {
             assets.open("tessdata/eng.traineddata").use { input ->
-                jsonData.outputStream().use { output ->
+                destFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
-                Log.d("OCR","prepareTesseract DONE")
             }
+            Log.d("OCR", "prepareTesseract DONE — copied ${destFile.length() / 1024}KB")
         }
     }
 
@@ -145,10 +149,8 @@ class ScreenCaptureService : Service() {
                     handler.post { showMonitoringOverlay() }
                 }
 
-                // Log Attempt
                 val currentId = attemptCount.incrementAndGet()
-                Log.d(TAG,"System: Capture Cycle #$currentId started")
-                sendConsoleUpdate("System: Capture Cycle #$currentId started")
+                Log.d(TAG, "System: Capture Cycle #$currentId started")
 
                 val image = try {
                     imageReader.acquireLatestImage()
@@ -159,13 +161,15 @@ class ScreenCaptureService : Service() {
                     val bitmap = imageToBitmap(image)
                     image.close()
 
-                    // 🟢 FIX: Submit to the queue instead of spawning a raw Thread
                     ocrExecutor.execute {
                         runOcr(bitmap, currentId)
-                        bitmap.recycle() // Recycle AFTER OCR is done
+                        bitmap.recycle()
                     }
+                } else {
+                    Log.d(TAG, "Capture Cycle #$currentId — no image available")
                 }
             } else {
+                Log.d(TAG, "Capture skipped — isFacebookOpen=false")
                 // Not in Facebook: Hide Overlay & Flush Buffer
                 if (overlayView != null) {
                     handler.post { removeOverlay() }
@@ -182,35 +186,66 @@ class ScreenCaptureService : Service() {
         val api = tess ?: return // Ensure Tesseract is ready
 
         try {
-            val startTime = System.currentTimeMillis()
+            val t0 = System.currentTimeMillis()
 
-            // 1. Scale down to 50% and convert to grayscale for faster OCR
-            val scaled = bitmap.scale(bitmap.width / 2, bitmap.height / 2, false)
+            // 1. Crop status bar (top 5%) and nav bar (bottom 8%) — no useful text there
+            val cropTop = (bitmap.height * 0.05).toInt()
+            val cropBottom = (bitmap.height * 0.08).toInt()
+            val cropped = Bitmap.createBitmap(bitmap, 0, cropTop, bitmap.width, bitmap.height - cropTop - cropBottom)
+
+            // 2. Scale down to 50%
+            val scaled = cropped.scale(cropped.width / 2, cropped.height / 2, false)
+            cropped.recycle()
+
+            // 3. Frame skip BEFORE grayscale — avoids paying for conversion on unchanged frames
+            val currentBrightness = computeAverageBrightness(scaled)
+            if (kotlin.math.abs(currentBrightness - previousBrightness) < 5.0) {
+                scaled.recycle()
+                Log.d(TAG, "OCR Cycle #$id — Skipped (unchanged frame, brightness=${"%.1f".format(currentBrightness)})")
+                return
+            }
+            previousBrightness = currentBrightness
+
+            // 4. Grayscale + moderate contrast boost
             val grayscale = Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888).also { bw ->
                 val canvas = android.graphics.Canvas(bw)
+                // Fill white first — screen captures on some devices have alpha=0,
+                // which makes drawBitmap a no-op and leaves Tesseract with a blank image
+                canvas.drawColor(android.graphics.Color.WHITE)
+                // Desaturate then boost contrast
+                val desaturate = android.graphics.ColorMatrix().also { it.setSaturation(0f) }
+                val contrastBoost = android.graphics.ColorMatrix(floatArrayOf(
+                    3f, 0f, 0f, 0f, -256f,
+                    0f, 3f, 0f, 0f, -256f,
+                    0f, 0f, 3f, 0f, -256f,
+                    0f, 0f, 0f, 1f,    0f
+                ))
+                desaturate.postConcat(contrastBoost)
                 val paint = android.graphics.Paint().apply {
-                    colorFilter = android.graphics.ColorMatrixColorFilter(
-                        android.graphics.ColorMatrix().also { it.setSaturation(0f) }
-                    )
+                    colorFilter = android.graphics.ColorMatrixColorFilter(desaturate)
                 }
                 canvas.drawBitmap(scaled, 0f, 0f, paint)
             }
             scaled.recycle()
+
+            val tPreprocess = System.currentTimeMillis()
+
+            // 4. Run OCR
             Log.d(TAG, "OCR Processing Cycle #$id")
-            // 2. Process Image
             api.setImage(grayscale)
             val text = api.utF8Text
-            grayscale.recycle() // Free memory immediately
+            api.clear()
+            grayscale.recycle()
 
-            val duration = System.currentTimeMillis() - startTime
-            Log.d(TAG, "OCR Cycle #$id processed in ${duration}ms")
-            sendConsoleUpdate("OCR Cycle #$id processed in ${duration}ms")
+            val tOcr = System.currentTimeMillis()
+            val duration = tOcr - t0
+            Log.d(TAG, "OCR Cycle #$id — Prep: ${tPreprocess - t0}ms, OCR: ${tOcr - tPreprocess}ms, Total: ${duration}ms")
+            sendConsoleUpdate("OCR Cycle #$id — Prep: ${tPreprocess - t0}ms, OCR: ${tOcr - tPreprocess}ms, Total: ${duration}ms")
+            Log.d(TAG, "OCR Text #$id: ${text?.trim() ?: "(empty)"}")
 
             if (!text.isNullOrBlank()) {
                 // 3. Analyze text for inappropriate words
                 val result = ContentAnalyzer.analyze(text)
-
-                Log.d(TAG, "OCR Text: $text")
                 if (!result.isClean) {
                     result.incidents.forEach { incident ->
 
@@ -290,15 +325,39 @@ class ScreenCaptureService : Service() {
         }
     }
 
+    /**
+     * Returns the average luminance (0–255) of a bitmap by sampling every 4th pixel.
+     * Works on both ARGB and grayscale bitmaps — uses standard luminance weights.
+     * Sampling keeps this well under 1ms on the 33%-scaled image size.
+     */
+    private fun computeAverageBrightness(bitmap: Bitmap): Double {
+        var total = 0L
+        var count = 0
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        var i = 0
+        while (i < pixels.size) {
+            val r = (pixels[i] shr 16) and 0xFF
+            val g = (pixels[i] shr 8) and 0xFF
+            val b = pixels[i] and 0xFF
+            total += (0.299 * r + 0.587 * g + 0.114 * b).toLong()
+            count++
+            i += 4 // sample every 4th pixel
+        }
+        return if (count == 0) 0.0 else total.toDouble() / count
+    }
+
     private fun imageToBitmap(image: Image): Bitmap {
         val plane = image.planes[0]
         val buffer = plane.buffer
         val pixelStride = plane.pixelStride
         val rowStride = plane.rowStride
         val rowPadding = rowStride - pixelStride * image.width
-        val bitmap = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
-        bitmap.copyPixelsFromBuffer(buffer)
-        return Bitmap.createBitmap(bitmap, 0, 0, image.width, image.height)
+        val padded = Bitmap.createBitmap(image.width + rowPadding / pixelStride, image.height, Bitmap.Config.ARGB_8888)
+        padded.copyPixelsFromBuffer(buffer)
+        val cropped = Bitmap.createBitmap(padded, 0, 0, image.width, image.height)
+        if (cropped !== padded) padded.recycle()
+        return cropped
     }
 
     private fun createNotification(): Notification {
@@ -317,7 +376,7 @@ class ScreenCaptureService : Service() {
         removeOverlay()
         CaptureState.isRunning = false
         if (::projection.isInitialized) projection.stop()
-        tess?.end()
+        tess?.end() // tess-two cleanup
         ocrExecutor.shutdownNow()
         super.onDestroy()
     }

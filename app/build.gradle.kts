@@ -28,6 +28,9 @@ android {
             )
         }
     }
+    androidResources {
+        noCompress += "traineddata"
+    }
     buildFeatures {
         compose = true
     }
