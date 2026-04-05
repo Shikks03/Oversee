@@ -61,6 +61,10 @@ class SignInActivity : ComponentActivity() {
             Toast.makeText(this, "Please enter email and password", Toast.LENGTH_SHORT).show()
             return
         }
+        if (!email.endsWith("@gmail.com")) {
+            Toast.makeText(this, "Email must end with @gmail.com", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         AuthRepository.signIn(this, email, pass) { success, error ->
             if (success) {
