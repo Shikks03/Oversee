@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
@@ -436,23 +438,36 @@ fun StickyExitButton(onExit: () -> Unit) {
 @Composable
 fun EditDeviceIdDialog(currentId: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var text by remember { mutableStateOf(currentId) }
+    val isValid = text.length == 9
+    val isError = text.isNotEmpty() && !isValid
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Change Device ID") },
         text = {
             Column {
-                Text("Enter a unique name or code for this device:", fontSize = 13.sp, color = Color.Gray)
+                Text("Enter a 9-digit number", fontSize = 13.sp, color = Color.Gray)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text,
-                    onValueChange = { text = it },
+                    onValueChange = { input ->
+                        if (input.all { it.isDigit() } && input.length <= 9) text = input
+                    },
                     singleLine = true,
-                    label = { Text("Device ID") }
+                    label = { Text("Device ID") },
+                    isError = isError,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    supportingText = {
+                        Text(
+                            text = "${text.length}/9 digits",
+                            color = if (isError) MaterialTheme.colorScheme.error else Color.Gray,
+                            fontSize = 11.sp
+                        )
+                    }
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(text) }) { Text("Save") }
+            Button(onClick = { onConfirm(text) }, enabled = isValid) { Text("Save") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }

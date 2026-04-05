@@ -554,20 +554,18 @@ fun LinkDeviceSetupScreen(
                 OutlinedTextField(
                     value = childIdInput,
                     onValueChange = { input ->
-                        // 🟢 1. Only allow digits AND 2. Limit length to 6
-                        if (input.all { it.isDigit() } && input.length <= 6) {
+                        if (input.all { it.isDigit() } && input.length <= 9) {
                             childIdInput = input
                         }
                     },
                     label = {
                         Text(
                             text = "Child Id",
-                            style = AppTheme.BodyBase, // Use a smaller style for the label
+                            style = AppTheme.BodyBase,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center
                         )
                     },
-                    //  Force the numeric keyboard
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -577,7 +575,8 @@ fun LinkDeviceSetupScreen(
 
                 // Confirm Button (Styled like your RoleButton)
                 Button(
-                    onClick = { if (childIdInput.isNotEmpty()) onLinkConfirmed(childIdInput) },
+                    onClick = { onLinkConfirmed(childIdInput) },
+                    enabled = childIdInput.length == 9,
                     modifier = Modifier.fillMaxWidth().height(56.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary),
                     shape = RoundedCornerShape(12.dp)
@@ -624,11 +623,23 @@ fun ParentBottomNavigation(onSettingsClick: () -> Unit) {
 @Composable
 fun LinkDeviceDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
+    val isValid = text.length == 9
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Pair Child Device") },
-        text = { OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Child ID") }) },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }) { Text("Link") } },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { input ->
+                    if (input.all { it.isDigit() } && input.length <= 9) text = input
+                },
+                label = { Text("Child ID (9 digits)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                supportingText = { Text("${text.length}/9 digits", fontSize = 11.sp) }
+            )
+        },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }, enabled = isValid) { Text("Link") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
