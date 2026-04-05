@@ -35,6 +35,7 @@ import com.example.prototype.data.UserRepository
 import com.example.prototype.ui.child.ChildDashboardActivity
 import com.example.prototype.ui.parent.ParentDashboardActivity
 import com.example.prototype.ui.theme.AppTheme
+import com.example.prototype.ui.theme.Responsive
 
 
 /**
@@ -138,11 +139,16 @@ fun RoleSelectionScreen(
     onSelectChild: () -> Unit,
     onSelectParent: () -> Unit
 ) {
+    val hPad = Responsive.horizontalPadding()
+    val vPad = Responsive.verticalPadding()
+    val iconSize = Responsive.setupIconSize()
+    val spacing = Responsive.sectionSpacing()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.Surface)
-            .padding(57.dp, 103.dp, 57.dp, 103.dp),
+            .padding(horizontal = hPad, vertical = vPad),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -161,15 +167,15 @@ fun RoleSelectionScreen(
                     style = AppTheme.BodyBase,
                 )
             }
-            Spacer(modifier = Modifier.height(90.dp))
+            Spacer(modifier = Modifier.height(spacing))
             Column(
                 Modifier
-                    .width(200.dp),
+                    .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(50.dp, Alignment.Top)
             ){
                 Column(horizontalAlignment = Alignment.CenterHorizontally){
                     Icon(
-                        modifier = Modifier.size(88.dp),
+                        modifier = Modifier.size(iconSize),
                         imageVector = Icons.Default.Face,
                         contentDescription = "OverSee Icon",
                         tint = AppTheme.Success // Or any color from your theme
@@ -184,7 +190,7 @@ fun RoleSelectionScreen(
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally){
                     Icon(
-                        modifier = Modifier.size(88.dp),
+                        modifier = Modifier.size(iconSize),
                         imageVector = Icons.Default.Person,
                         contentDescription = "OverSee Icon",
                         tint = AppTheme.Primary // Or any color from your theme

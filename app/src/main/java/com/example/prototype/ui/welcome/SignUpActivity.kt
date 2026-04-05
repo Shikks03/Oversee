@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.prototype.data.AuthRepository
+import com.example.prototype.ui.theme.Responsive
 
 
 class SignUpActivity : ComponentActivity() {
@@ -77,6 +78,8 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val hPad = Responsive.horizontalPadding()
+    val logoSize = Responsive.logoSize()
 
     // 1. Main Background Container
     Box(
@@ -92,7 +95,7 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
 
             // 2. Logo & Header (Matches Login)
             Icon(
-                modifier = Modifier.size(150.dp).padding(30.dp),
+                modifier = Modifier.size(logoSize).padding(logoSize * 0.2f),
                 imageVector = Icons.Default.VerifiedUser,
                 contentDescription = "OverSee Icon",
                 tint = AppTheme.Surface
@@ -108,7 +111,7 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
             ) {
                 Column(
                     // Reduced top padding slightly (71dp -> 40dp) to fit the extra field comfortably
-                    modifier = Modifier.padding(start = 57.dp, top = 64.dp, end = 57.dp, bottom = 40.dp),
+                    modifier = Modifier.padding(start = hPad, top = 48.dp, end = hPad, bottom = 40.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(30.dp)
                 ) {
@@ -125,7 +128,8 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
                         onValueChange = { name = it },
                         label = { Text("Name", style = AppTheme.BodyBase, color = AppTheme.TextTertiary) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
                     )
 
                     OutlinedTextField(
@@ -133,7 +137,8 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
                         onValueChange = { email = it },
                         label = { Text("Email", style = AppTheme.BodyBase, color = AppTheme.TextTertiary) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
                     )
 
                     OutlinedTextField(
@@ -142,7 +147,8 @@ fun SignUpScreen(onSignUp: (String, String, String) -> Unit, onLoginClick: () ->
                         label = { Text("Password", style = AppTheme.BodyBase, color = AppTheme.TextTertiary) },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))

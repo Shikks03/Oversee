@@ -1,7 +1,9 @@
 package com.example.prototype.ui.theme
 
 // --- COMPOSE UI ---
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -54,6 +56,47 @@ val AppTypography = Typography(
     displayLarge = AppTheme.TitlePageStyle,
     bodyLarge = TextStyle(fontSize = 16.sp)
 )
+
+/**
+ * Screen-relative sizing helpers. All values are computed as a fraction of the
+ * current screen dimensions, so layouts adapt automatically to any phone or tablet.
+ */
+object Responsive {
+    /** ~15 % of screen width — replaces the hard-coded 57 dp horizontal inset. */
+    @Composable
+    fun horizontalPadding(): Dp {
+        val w = LocalConfiguration.current.screenWidthDp
+        return (w * 0.15f).dp
+    }
+
+    /** ~12 % of screen height — replaces the hard-coded 103 dp vertical padding. */
+    @Composable
+    fun verticalPadding(): Dp {
+        val h = LocalConfiguration.current.screenHeightDp
+        return (h * 0.12f).dp.coerceIn(48.dp, 120.dp)
+    }
+
+    /** Logo icon on sign-in / sign-up screens (~35 % of width). */
+    @Composable
+    fun logoSize(): Dp {
+        val w = LocalConfiguration.current.screenWidthDp
+        return (w * 0.35f).dp.coerceIn(80.dp, 160.dp)
+    }
+
+    /** Section icon on setup / role screens (~22 % of width). */
+    @Composable
+    fun setupIconSize(): Dp {
+        val w = LocalConfiguration.current.screenWidthDp
+        return (w * 0.22f).dp.coerceIn(60.dp, 96.dp)
+    }
+
+    /** Vertical gap between content sections (~9 % of screen height). */
+    @Composable
+    fun sectionSpacing(): Dp {
+        val h = LocalConfiguration.current.screenHeightDp
+        return (h * 0.09f).dp.coerceIn(32.dp, 100.dp)
+    }
+}
 
 //TEMP
 object UserRoles{

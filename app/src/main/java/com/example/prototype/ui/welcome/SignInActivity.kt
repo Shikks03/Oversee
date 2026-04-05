@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.example.prototype.data.AuthRepository
 import com.example.prototype.data.UserRepository
 import com.example.prototype.ui.theme.AppTheme
+import com.example.prototype.ui.theme.Responsive
 
 
 // In SignInActivity.kt
@@ -115,11 +116,13 @@ class SignInActivity : ComponentActivity() {
 fun SignInScreen(onSignIn: (String, String) -> Unit, onSignUpClick: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    val hPad = Responsive.horizontalPadding()
+    val logoSize = Responsive.logoSize()
 
     Box(Modifier.fillMaxSize().background(AppTheme.SecBackground), contentAlignment = Alignment.BottomCenter) {
         Column(horizontalAlignment = Alignment.CenterHorizontally){
             Icon(
-                modifier = Modifier.size(150.dp),
+                modifier = Modifier.size(logoSize),
                 imageVector = Icons.Default.VerifiedUser,
                 contentDescription = "OverSee Icon",
                 tint = AppTheme.Surface
@@ -130,13 +133,14 @@ fun SignInScreen(onSignIn: (String, String) -> Unit, onSignUpClick: () -> Unit) 
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 shape = RoundedCornerShape(44.dp, 44.dp, 0.dp, 0.dp)
             ) {
-                Column(Modifier.padding(57.dp, 71.dp, 57.dp, 100.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Top)) {
+                Column(Modifier.padding(start = hPad, top = 56.dp, end = hPad, bottom = 80.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Top)) {
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
                         label = { Text("Email", style = AppTheme.BodyBase, color = AppTheme.TextTertiary) },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
                     )
                     OutlinedTextField(
                         value = password,
@@ -144,7 +148,8 @@ fun SignInScreen(onSignIn: (String, String) -> Unit, onSignUpClick: () -> Unit) 
                         label = { Text("Password", style = AppTheme.BodyBase, color = AppTheme.TextTertiary) },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
