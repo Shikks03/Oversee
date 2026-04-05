@@ -2,6 +2,8 @@ package com.example.prototype.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.example.prototype.data.local.CryptoManager
+import com.example.prototype.data.local.KeyManager
 import com.google.firebase.firestore.FirebaseFirestore
 import org.json.JSONObject
 import java.io.File
@@ -46,37 +48,41 @@ object FirebaseSyncManager {
     // --- PRIVATE HELPERS ---
 
     private fun uploadBatch(context: Context, logs: List<LogEntry>) {
-        val db = FirebaseFirestore.getInstance()
         val deviceId = getDeviceId(context)
 
-        // Reference: monitor_sessions/{DEVICE_ID}
-        val userDocRef = db.collection(COLLECTION_SESSIONS).document(deviceId)
-        val batch = db.batch()
+        KeyManager.getOrCreateKey(context, deviceId) { key ->
+            val db = FirebaseFirestore.getInstance()
 
-        // Create a new document in the "logs" sub-collection for each incident
-        for (log in logs) {
-            val newDocRef = userDocRef.collection(SUBCOL_LOGS).document()
+            // Reference: monitor_sessions/{DEVICE_ID}
+            val userDocRef = db.collection(COLLECTION_SESSIONS).document(deviceId)
+            val batch = db.batch()
 
-            val dataMap = hashMapOf(
-                "word" to log.word,
-                "severity" to log.severity,
-                "app" to log.app,
-                "timestamp" to log.timestamp
-            )
+            // Create a new document in the "logs" sub-collection for each incident
+            for (log in logs) {
+                val newDocRef = userDocRef.collection(SUBCOL_LOGS).document()
 
-            batch.set(newDocRef, dataMap)
+                val dataMap = hashMapOf(
+                    "word" to CryptoManager.encryptString(log.word, key),
+                    "severity" to CryptoManager.encryptString(log.severity, key),
+                    "app" to CryptoManager.encryptString(log.app, key),
+                    "timestamp" to log.timestamp,  // Left unencrypted for Firestore ordering
+                    "encrypted" to true
+                )
+
+                batch.set(newDocRef, dataMap)
+            }
+
+            // Commit all writes at once (Atomic Operation)
+            batch.commit()
+                .addOnSuccessListener {
+                    Log.d(TAG, "✅ Cloud Sync Complete!")
+                    // Update the checkpoint so we don't re-upload these
+                    saveLastSyncTime(context, System.currentTimeMillis())
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Cloud Sync Failed", e)
+                }
         }
-
-        // Commit all writes at once (Atomic Operation)
-        batch.commit()
-            .addOnSuccessListener {
-                Log.d(TAG, "✅ Cloud Sync Complete!")
-                // Update the checkpoint so we don't re-upload these
-                saveLastSyncTime(context, System.currentTimeMillis())
-            }
-            .addOnFailureListener { e ->
-                Log.e(TAG, "❌ Cloud Sync Failed", e)
-            }
     }
 
     private fun getDeviceId(context: Context): String {
