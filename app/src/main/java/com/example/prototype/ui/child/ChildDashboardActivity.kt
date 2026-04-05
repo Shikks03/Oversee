@@ -528,7 +528,7 @@ fun ChildLinkSetupScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = deviceId.chunked(3).joinToString("-"), // Formats 123456 -> 123-456
+                            text = if (deviceId.all { it.isDigit() }) deviceId.chunked(3).joinToString("-") else deviceId,
                             fontSize = 40.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = 4.sp,
