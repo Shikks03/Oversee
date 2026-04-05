@@ -39,6 +39,7 @@ import com.google.firebase.firestore.*
 
 // --- PROJECT SPECIFIC ---
 import com.example.prototype.ui.theme.AppTheme
+import com.example.prototype.ui.theme.Responsive
 import com.example.prototype.ui.welcome.RoleSelectionActivity // Or LoginActivity if you created it
 
 // --- UTILS ---
@@ -504,12 +505,16 @@ fun LinkDeviceSetupScreen(
     onLogout: () -> Unit
 ) {
     var childIdInput by remember { mutableStateOf("") }
+    val hPad = Responsive.horizontalPadding()
+    val vPad = Responsive.verticalPadding()
+    val iconSize = Responsive.setupIconSize()
+    val spacing = Responsive.sectionSpacing()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.Surface)
-            .padding(horizontal = 57.dp, vertical = 103.dp), // Matches Role Selection
+            .padding(horizontal = hPad, vertical = vPad),
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(
@@ -520,7 +525,7 @@ fun LinkDeviceSetupScreen(
             Column(verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top)) {
                 // Large Link Icon
                 Icon(
-                    modifier = Modifier.size(88.dp),
+                    modifier = Modifier.size(iconSize),
                     imageVector = Icons.Default.Link,
                     contentDescription = null,
                     tint = AppTheme.Primary
@@ -537,11 +542,11 @@ fun LinkDeviceSetupScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(90.dp))
+            Spacer(modifier = Modifier.height(spacing))
 
             // --- CENTER SECTION (Icon & Input) ---
             Column(
-                modifier = Modifier.width(250.dp), // Slightly wider to fit text input
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(40.dp, Alignment.Top)
             ) {

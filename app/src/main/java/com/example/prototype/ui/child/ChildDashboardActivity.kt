@@ -39,6 +39,7 @@ import com.example.prototype.data.remote.FirebaseSyncManager
 import com.example.prototype.service.ScreenCaptureService
 import com.example.prototype.ui.parent.ParentDashboardScreen
 import com.example.prototype.ui.theme.AppTheme
+import com.example.prototype.ui.theme.Responsive
 import com.example.prototype.ui.welcome.RoleSelectionActivity
 import com.example.prototype.ui.welcome.SignInActivity
 import com.google.firebase.FirebaseApp
@@ -467,12 +468,16 @@ fun ChildLinkSetupScreen(
 ) {
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
+    val hPad = Responsive.horizontalPadding()
+    val vPad = Responsive.verticalPadding()
+    val iconSize = Responsive.setupIconSize()
+    val spacing = Responsive.sectionSpacing()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AppTheme.Surface)
-            .padding(57.dp, 103.dp, 57.dp, 103.dp), // Matches Role Selection padding
+            .padding(horizontal = hPad, vertical = vPad),
         contentAlignment = Alignment.TopCenter,
     ) {
         Column(
@@ -482,7 +487,7 @@ fun ChildLinkSetupScreen(
             // --- TOP SECTION ---
             Column(verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top)) {
                 Icon(
-                    modifier = Modifier.size(88.dp),
+                    modifier = Modifier.size(iconSize),
                     imageVector = Icons.Default.QrCode, // Changed icon to represent ID/Code
                     contentDescription = null,
                     tint = AppTheme.Success // Green color for Child UI
@@ -499,11 +504,11 @@ fun ChildLinkSetupScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(60.dp))
+            Spacer(modifier = Modifier.height(spacing))
 
             // --- CENTER SECTION (ID Display) ---
             Column(
-                modifier = Modifier.width(280.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(40.dp, Alignment.Top)
             ) {
