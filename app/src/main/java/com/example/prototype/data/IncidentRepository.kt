@@ -3,6 +3,7 @@ package com.example.prototype.data
 import android.content.Context
 import com.example.prototype.data.local.LocalStorageManager
 import com.example.prototype.data.model.Incident
+import com.example.prototype.data.remote.FcmAlertManager
 import com.example.prototype.data.remote.FirebaseIncidentManager
 import com.example.prototype.data.remote.FirebaseSyncManager
 
@@ -15,9 +16,10 @@ object IncidentRepository {
     fun saveIncident(context: Context, incident: Incident) {
         LocalStorageManager.logIncident(context, incident.word, incident.severity, incident.appName)
 
-        // Critical alerts sync immediately
+        // Critical alerts sync immediately and notify parent
         if (incident.severity == "HIGH") {
             FirebaseSyncManager.syncPendingLogs(context)
+            FcmAlertManager.sendHighSeverityAlert(context)
         }
     }
 
