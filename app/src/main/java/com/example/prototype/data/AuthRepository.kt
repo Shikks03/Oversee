@@ -1,6 +1,7 @@
 package com.example.prototype.data
 
 import android.content.Context
+import com.example.prototype.data.remote.FcmTokenManager
 import com.example.prototype.data.remote.FirebaseAuthManager
 import com.example.prototype.data.remote.FirebaseUserManager
 
@@ -16,7 +17,10 @@ object AuthRepository {
         FirebaseAuthManager.signIn(email, pass) { success, error ->
             if (success) {
                 val uid = getUserId() ?: return@signIn
-                UserRepository.refreshLocalProfile(context, uid) { onResult(true, null) }
+                UserRepository.refreshLocalProfile(context, uid) {
+                    FcmTokenManager.refreshAndStoreToken(uid)
+                    onResult(true, null)
+                }
             } else {
                 onResult(false, error)
             }
@@ -37,7 +41,10 @@ object AuthRepository {
                         "created_at" to System.currentTimeMillis()
                     )
                     FirebaseUserManager.createUserProfile(uid, profile) {
-                        UserRepository.refreshLocalProfile(context, uid) { onResult(true, null) }
+                        UserRepository.refreshLocalProfile(context, uid) {
+                            FcmTokenManager.refreshAndStoreToken(uid)
+                            onResult(true, null)
+                        }
                     }
                 }
             } else onResult(false, error)
@@ -45,6 +52,7 @@ object AuthRepository {
     }
 
     fun logout(context: Context) {
+        getUserId()?.let { uid -> FcmTokenManager.clearToken(uid) }
         FirebaseAuthManager.signOut()
         UserRepository.clearLocalData(context) // Ensure clearLocalData exists in UserRepository
     }

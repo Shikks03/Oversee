@@ -1,12 +1,16 @@
 package com.example.prototype.ui.parent
 
 // --- ANDROID & CORE ---
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatDelegate
 
 // --- JETPACK COMPOSE UI ---
@@ -63,14 +67,28 @@ class ParentDashboardActivity : ComponentActivity() {
     private var isRefreshing = mutableStateOf(false)
 
 
+    // --- NOTIFICATION PERMISSION ---
+    private val notifPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* permission result handled silently */ }
+
     // --- LIFECYCLE ---
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Request POST_NOTIFICATIONS permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         // 1. Initial Load: Get ID from Local Repository
         loadLocalData()
 
-        if (currentTargetId.value != "NOT_LINKED") refreshDashboard()
+        // Auto-refresh when opened from a HIGH severity notification tap
+        val autoRefresh = intent.getBooleanExtra("auto_refresh", false)
+        if (currentTargetId.value != "NOT_LINKED" || autoRefresh) refreshDashboard()
 
         val user = UserRepository.getLocalName(this)
 
