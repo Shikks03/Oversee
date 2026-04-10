@@ -10,7 +10,7 @@ import kotlin.math.max
  * Usage:
  *   val engine = TextAnalysisEngine.fromAssets(context)  // production
  *   val engine = TextAnalysisEngine.withWords(setOf(...)) // tests
- *   val results: List<DetectedWord> = engine.analyze(ocrText)
+ *   val result: AnalysisResult = engine.analyze(ocrText)
  */
 class TextAnalysisEngine private constructor(
     private val referenceWords: Set<String>
@@ -46,41 +46,53 @@ class TextAnalysisEngine private constructor(
     // ─────────────────────────────────────────────────────────────
 
     data class DetectedWord(
-        val rawToken: String,         // the normalized token
-        val matchedWord: String,      // the reference word it matched
-        val similarityScore: Float,   // 1 - (dist / max(token.len, ref.len))
-        val levenshteinDistance: Int
+        val rawToken: String,            // the normalized token (lowercased, cleaned)
+        val matchedWord: String,         // the reference word it matched
+        val similarityScore: Float,      // 1 - (dist / max(token.len, ref.len))
+        val levenshteinDistance: Int,
+        val tokenIndex: Int,             // position in AnalysisResult.rawTokens (pre-filter)
+        val isAllCaps: Boolean,          // true if all alpha chars were uppercase after leet sub
+        val hasPunctuation: Boolean,     // true if original token ended with ! ? or .
+        val hasRepetition: Boolean       // true if original token had 3+ consecutive identical chars
+    )
+
+    data class AnalysisResult(
+        val rawTokens: List<String>,     // all original tokens before normalization
+        val detectedWords: List<DetectedWord>
     )
 
     /**
-     * Run the full two-stage pipeline on [ocrText] and return every detected
-     * inappropriate token. Empty list means no matches (clean).
+     * Run the full two-stage pipeline on [ocrText] and return an [AnalysisResult]
+     * containing the original token list and every detected inappropriate token.
      */
-    fun analyze(ocrText: String): List<DetectedWord> {
-        // 1ST PART: TEXT PREPROCESSING
-        val tokens = tokenize(ocrText)
-            .map { normalizeToken(it) }
-            .filter { it.length > 2 }   // short-token filter: keep only length > 2
+    fun analyze(ocrText: String): AnalysisResult {
+        // 1ST PART: TOKENIZE — keep raw tokens for index tracking and proximity checks
+        val rawTokens = tokenize(ocrText)
 
-        // 2ND PART: LEVENSHTEIN SIMILARITY ANALYSIS
+        // 2ND PART: NORMALIZE + LEVENSHTEIN SIMILARITY ANALYSIS
         val detected = mutableListOf<DetectedWord>()
 
-        for (token in tokens) {
-            if (token.isEmpty()) continue
+        for ((idx, raw) in rawTokens.withIndex()) {
+            val norm = normalizeToken(raw)
+            if (norm.text.length <= 2) continue   // short-token filter: keep only length > 2
 
             var bestMatch: DetectedWord? = null
 
             for (refWord in referenceWords) {
-                val dist = levenshteinDistance(token, refWord)
-                val sim  = similarityScore(token, refWord, dist)
+                val dist = levenshteinDistance(norm.text, refWord)
+                val sim  = similarityScore(norm.text, refWord, dist)
 
-                if (isFuzzyMatch(token.length, dist, sim)) {
+                if (isFuzzyMatch(norm.text.length, dist, sim)) {
                     if (bestMatch == null || sim > bestMatch.similarityScore) {
                         bestMatch = DetectedWord(
-                            rawToken          = token,
-                            matchedWord       = refWord,
-                            similarityScore   = sim,
-                            levenshteinDistance = dist
+                            rawToken            = norm.text,
+                            matchedWord         = refWord,
+                            similarityScore     = sim,
+                            levenshteinDistance = dist,
+                            tokenIndex          = idx,
+                            isAllCaps           = norm.isAllCaps,
+                            hasPunctuation      = norm.hasPunctuation,
+                            hasRepetition       = norm.hasRepetition
                         )
                     }
                 }
@@ -89,55 +101,92 @@ class TextAnalysisEngine private constructor(
             if (bestMatch != null) detected.add(bestMatch)
         }
 
-        return detected
+        return AnalysisResult(rawTokens, detected)
     }
 
     // ─────────────────────────────────────────────────────────────
     // STAGE 1 — Private helpers
     // ─────────────────────────────────────────────────────────────
 
-    /** Step 1 — Split raw OCR text into individual tokens on any whitespace. */
+    /** Split raw OCR text into individual tokens on any whitespace. */
     private fun tokenize(raw: String): List<String> =
         raw.split(Regex("\\s+")).filter { it.isNotBlank() }
 
     /**
-     * Step 2 + 3 — Per-character normalization followed by final cleanup.
+     * Carrier for the results of a single-pass normalization.
      *
-     * Order of operations:
-     *   2b) Strip trailing '!' characters first (so leftover '!' in middle converts to 'i')
-     *   2a) Map leet/symbol characters to their letter equivalents
-     *   2c) Collapse runs of 3+ consecutive identical characters to max 2
-     *   3)  Trim, remove remaining non-alphanumeric symbols, lowercase
+     * [text]           — fully normalized, lowercased — feeds Levenshtein
+     * [isAllCaps]      — all alphabetic chars were uppercase after leet substitution
+     * [hasPunctuation] — original token ended with '!', '?', or '.'
+     * [hasRepetition]  — post-leet string contained 3+ consecutive identical chars
      */
-    private fun normalizeToken(token: String): String {
-        // 2b — Remove trailing '!' (may be multiple: "idiot!!" → "idiot")
+    private data class NormalizedToken(
+        val text: String,
+        val isAllCaps: Boolean,
+        val hasPunctuation: Boolean,
+        val hasRepetition: Boolean
+    )
+
+    /**
+     * Per-token normalization pipeline. Strict ordering:
+     *
+     *  1. Check hasPunctuation on the ORIGINAL token.
+     *  2. Strip trailing '!' characters.
+     *  3. Leet substitution — UPPERCASE map so caps detection survives.
+     *  4. Check hasRepetition (3+ consecutive identical chars, post-leet, pre-collapse).
+     *  5. Collapse runs of 3+ identical chars down to 2.
+     *  6. Strip remaining non-alphanumeric characters.
+     *  7. Check isAllCaps (≥ 2 alpha chars, all uppercase).
+     *  8. Lowercase — absolute last step before returning.
+     */
+    private fun normalizeToken(token: String): NormalizedToken {
+        // Step 1 — hasPunctuation on original token
+        val hasPunctuation = token.endsWith('!') || token.endsWith('?') || token.endsWith('.')
+
+        // Step 2 — Strip trailing '!'
         var working = token
         while (working.endsWith('!')) {
             working = working.dropLast(1)
         }
 
-        // 2a + 2c — Single-pass char iteration: leet substitution + repeat collapse
-        val output = StringBuilder()
+        // Step 3 — Leet substitution (uppercase map)
+        val afterLeet = StringBuilder(working.length)
         for (ch in working) {
-            val mapped = leetMap[ch] ?: ch   // 2a: substitute or keep as-is
+            afterLeet.append(leetMap[ch] ?: ch)
+        }
+        val leetStr = afterLeet.toString()
 
-            // 2c: if appending this char would create a 3rd consecutive identical char, skip it
-            if (output.length >= 2 &&
-                output[output.length - 1] == mapped &&
-                output[output.length - 2] == mapped
+        // Step 4 — Detect 3+ consecutive identical chars (post-leet, pre-collapse)
+        val hasRepetition = leetStr.contains(Regex("(.)\\1\\1"))
+
+        // Step 5 — Collapse 3+ consecutive identical chars → max 2
+        val collapsed = StringBuilder(leetStr.length)
+        for (ch in leetStr) {
+            if (collapsed.length >= 2 &&
+                collapsed[collapsed.length - 1] == ch &&
+                collapsed[collapsed.length - 2] == ch
             ) {
                 continue
             }
-
-            output.append(mapped)
+            collapsed.append(ch)
         }
 
-        // 3 — Final cleanup: trim, strip remaining non-alphanumeric, lowercase
-        return output
-            .toString()
-            .trim()
-            .replace(Regex("[^a-zA-Z0-9]"), "")
-            .lowercase(Locale.getDefault())
+        // Step 6 — Strip non-alphanumeric
+        val stripped = collapsed.toString().trim().replace(Regex("[^a-zA-Z0-9]"), "")
+
+        // Step 7 — isAllCaps: at least 2 alpha chars, all uppercase
+        val alphaChars = stripped.filter { it.isLetter() }
+        val isAllCaps = alphaChars.length >= 2 && alphaChars.all { it.isUpperCase() }
+
+        // Step 8 — Lowercase (last step)
+        val finalText = stripped.lowercase(Locale.getDefault())
+
+        return NormalizedToken(
+            text           = finalText,
+            isAllCaps      = isAllCaps,
+            hasPunctuation = hasPunctuation,
+            hasRepetition  = hasRepetition
+        )
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -151,9 +200,9 @@ class TextAnalysisEngine private constructor(
      * Space: O(min(|a|, |b|))
      */
     private fun levenshteinDistance(a: String, b: String): Int {
-        if (a == b)       return 0
-        if (a.isEmpty())  return b.length
-        if (b.isEmpty())  return a.length
+        if (a == b)      return 0
+        if (a.isEmpty()) return b.length
+        if (b.isEmpty()) return a.length
 
         // Ensure b is the shorter string to minimise array allocation
         if (a.length < b.length) return levenshteinDistance(b, a)
@@ -166,9 +215,9 @@ class TextAnalysisEngine private constructor(
             for (j in 1..b.length) {
                 val cost = if (a[i - 1] == b[j - 1]) 0 else 1
                 curr[j] = minOf(
-                    curr[j - 1] + 1,        // insertion
-                    prev[j] + 1,            // deletion
-                    prev[j - 1] + cost      // substitution
+                    curr[j - 1] + 1,     // insertion
+                    prev[j] + 1,         // deletion
+                    prev[j - 1] + cost   // substitution
                 )
             }
             val tmp = prev; prev = curr; curr = tmp
@@ -195,13 +244,13 @@ class TextAnalysisEngine private constructor(
         if (tokenLen <= 4) distance == 0 else sim >= 0.60f
 
     private val leetMap: Map<Char, Char> = mapOf(
-        '0' to 'o',
-        '1' to 'i',
-        '3' to 'e',
-        '4' to 'a',
-        '5' to 's',
-        '@' to 'a',
-        '$' to 's',
-        '!' to 'i'
+        '0' to 'O',
+        '1' to 'I',
+        '3' to 'E',
+        '4' to 'A',
+        '5' to 'S',
+        '@' to 'A',
+        '$' to 'S',
+        '!' to 'I'
     )
 }
