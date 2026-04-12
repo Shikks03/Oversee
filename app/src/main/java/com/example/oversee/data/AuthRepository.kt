@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.oversee.data.remote.FcmTokenManager
 import com.example.oversee.data.remote.FirebaseAuthManager
 import com.example.oversee.data.remote.FirebaseUserManager
+import com.example.oversee.data.remote.LoginRateLimiter
 
 object AuthRepository {
 
@@ -11,19 +12,29 @@ object AuthRepository {
     fun getUserId(): String? = FirebaseAuthManager.getUid()
 
     fun signIn(context: Context, email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
-        FirebaseAuthManager.signIn(email, pass) { success, error ->
-            if (success) {
-                val uid = getUserId() ?: return@signIn
-                UserRepository.refreshLocalProfile(context, uid) {
-                    context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-                        .edit().remove("pending_fcm_token").apply()
-                    FcmTokenManager.refreshAndStoreToken(uid)
-                    onResult(true, null)
+        LoginRateLimiter.checkAndProceed(
+            onBlocked = { errorMsg -> onResult(false, errorMsg) },
+            onReady = { ip ->
+                FirebaseAuthManager.signIn(email, pass) { success, error ->
+                    if (success) {
+                        LoginRateLimiter.resetAttempts(ip)
+                        val uid = getUserId() ?: return@signIn
+                        UserRepository.refreshLocalProfile(context, uid) {
+                            context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                                .edit().remove("pending_fcm_token").apply()
+                            FcmTokenManager.refreshAndStoreToken(uid)
+                            onResult(true, null)
+                        }
+                    } else {
+                        LoginRateLimiter.recordFailedAttempt(ip) { attemptsLeft, lockoutMsg ->
+                            val msg = lockoutMsg
+                                ?: "Incorrect credentials. You have $attemptsLeft attempt(s) left."
+                            onResult(false, msg)
+                        }
+                    }
                 }
-            } else {
-                onResult(false, error)
             }
-        }
+        )
     }
 
     fun register(context: Context, name: String, email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
