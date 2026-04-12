@@ -3,6 +3,7 @@ package com.example.prototype.data
 import android.content.Context
 import com.example.prototype.data.remote.FirebaseAuthManager
 import com.example.prototype.data.remote.FirebaseUserManager
+import com.example.prototype.data.remote.LoginRateLimiter
 
 /**
  * Manages user authentication state and coordinates with the data layer.
@@ -13,14 +14,26 @@ object AuthRepository {
     fun getUserId(): String? = FirebaseAuthManager.getUid()
 
     fun signIn(context: Context, email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
-        FirebaseAuthManager.signIn(email, pass) { success, error ->
-            if (success) {
-                val uid = getUserId() ?: return@signIn
-                UserRepository.refreshLocalProfile(context, uid) { onResult(true, null) }
-            } else {
-                onResult(false, error)
+        LoginRateLimiter.checkAndProceed(
+            onBlocked = { errorMsg ->
+                onResult(false, errorMsg)
+            },
+            onReady = { ip ->
+                FirebaseAuthManager.signIn(email, pass) { success, error ->
+                    if (success) {
+                        LoginRateLimiter.resetAttempts(ip)
+                        val uid = getUserId() ?: return@signIn
+                        UserRepository.refreshLocalProfile(context, uid) { onResult(true, null) }
+                    } else {
+                        LoginRateLimiter.recordFailedAttempt(ip) { attemptsLeft, lockoutMsg ->
+                            val msg = lockoutMsg
+                                ?: "Incorrect credentials. You have $attemptsLeft attempt(s) left."
+                            onResult(false, msg)
+                        }
+                    }
+                }
             }
-        }
+        )
     }
 
     fun register(context: Context, name: String, email: String, pass: String, onResult: (Boolean, String?) -> Unit) {
