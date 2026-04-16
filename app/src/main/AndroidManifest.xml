@@ -18,7 +18,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Prototype">
         <activity android:name=".ui.child.ChildDashboardActivity" android:exported="false" />
-        <activity android:name=".ui.child.CapturePermissionActivity" />
+        <activity
+            android:name=".ui.child.CapturePermissionActivity"
+            android:theme="@style/Theme.Prototype.Transparent"
+            android:exported="false"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="" />
         <activity
             android:name=".ui.welcome.RoleSelectionActivity"
             android:exported="false" />

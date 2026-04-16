@@ -121,7 +121,11 @@ class OverlayService : Service() {
 
     private fun startPermissionActivity() {
         val intent = Intent(this, CapturePermissionActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+            )
         }
         startActivity(intent)
     }

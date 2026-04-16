@@ -39,6 +39,8 @@ class CapturePermissionActivity : ComponentActivity() {
             }
             // 3. Close this bridge activity
             finish()
+            @Suppress("DEPRECATION")
+            overridePendingTransition(0, 0)
         }
 
         captureLauncher.launch(projectionManager.createScreenCaptureIntent())
