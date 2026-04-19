@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.prototype"
+    namespace = "com.example.oversee"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.prototype"
+        applicationId = "com.example.oversee"
         minSdk = 30
         targetSdk = 36
         versionCode = 1

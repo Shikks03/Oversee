@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "prototype-1c3df"
-  }
+    "default": "oversee-thesis"
+  },
+  "targets": {},
+  "etags": {}
 }

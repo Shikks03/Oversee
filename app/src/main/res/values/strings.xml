@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Prototype</string>
+    <string name="app_name">Oversee</string>
     <string name="accessibility_service_description">Detects when Facebook is open for screen capture</string>
 </resources>
