@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import com.example.oversee.data.AuthRepository
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.UserRepository
 
 // --- PROJECT SPECIFIC ---
@@ -98,18 +99,24 @@ class RoleSelectionActivity : ComponentActivity() {
     }
 
     /**
-     * Updates the role in both Cloud and Local storage.
+     * Gets this phone's FID, writes the device doc with the chosen role, mirrors
+     * the FID pointer on the family doc, then navigates to the appropriate dashboard.
      */
     private fun selectRole(role: String) {
         val uid = AuthRepository.getUserId() ?: return
-
-        UserRepository.updateUserRole(this, uid, role) { success ->
-            if (success) {
-                val target = if (role == "CHILD") ChildDashboardActivity::class.java
-                else ParentDashboardActivity::class.java
-                navigateToDashboard(target)
-            } else {
-                Toast.makeText(this, "Failed to update role. Try again.", Toast.LENGTH_SHORT).show()
+        DeviceRepository.getFid { fid ->
+            if (fid == null) {
+                Toast.makeText(this, "Could not identify this device. Try again.", Toast.LENGTH_SHORT).show()
+                return@getFid
+            }
+            DeviceRepository.setRoleForThisDevice(this, uid, fid, role) { success ->
+                if (success) {
+                    val target = if (role == "CHILD") ChildDashboardActivity::class.java
+                    else ParentDashboardActivity::class.java
+                    navigateToDashboard(target)
+                } else {
+                    Toast.makeText(this, "Failed to set up this device. Try again.", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -161,7 +168,7 @@ fun RoleSelectionScreen(
                     textAlign = TextAlign.Left
                 )
                 Text(
-                    text = "Which device are you currently using?",
+                    text = "Whose phone is this?",
                     style = AppTheme.BodyBase,
                 )
             }
@@ -178,9 +185,8 @@ fun RoleSelectionScreen(
                         contentDescription = "OverSee Icon",
                         tint = AppTheme.Success // Or any color from your theme
                     )
-                    // Triggers handleChildLogin() on click.
                     RoleButton(
-                        text = "Child Device",
+                        text = "This is my child's phone",
                         color = AppTheme.Success,
                         onClick = onSelectChild
                     )
@@ -193,9 +199,8 @@ fun RoleSelectionScreen(
                         contentDescription = "OverSee Icon",
                         tint = AppTheme.Primary // Or any color from your theme
                     )
-                    // Triggers handleParentLogin() on click.
                     RoleButton(
-                        text = "Parent Device",
+                        text = "This is my phone",
                         color = AppTheme.Primary,
                         onClick = onSelectParent
                     )
