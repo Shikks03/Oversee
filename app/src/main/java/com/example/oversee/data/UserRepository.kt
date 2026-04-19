@@ -37,7 +37,7 @@ object UserRepository {
                 onResult(cloudId)
             } else {
                 val localId = getLocalDeviceId(context)
-                if (localId != "000000" && localId != "NOT_SET") {
+                if (localId.isNotEmpty() && localId != "NOT_SET") {
                     // 2. Found in Local only, sync to Cloud
                     updateDeviceId(context, uid, localId) { onResult(localId) }
                 } else {
@@ -54,7 +54,7 @@ object UserRepository {
         AppPreferenceManager.saveString(context, "name", profile["name"] as? String ?: "")
         AppPreferenceManager.saveString(context, "email", profile["email"] as? String ?: "")
         AppPreferenceManager.saveString(context, "role", profile["role"] as? String ?: "NOT_SET")
-        AppPreferenceManager.saveString(context, "device_id", profile["device_id"] as? String ?: "000000")
+        AppPreferenceManager.saveString(context, "device_id", profile["device_id"] as? String ?: "")
         AppPreferenceManager.saveString(context, "target_id", profile["linked_child_id"] as? String ?: "NOT_LINKED")
         AppPreferenceManager.saveLong(context, "created_at", profile["created_at"] as? Long ?: 0L)
     }
@@ -63,7 +63,7 @@ object UserRepository {
     fun getLocalName(context: Context): String = AppPreferenceManager.getString(context, "name", "")
     fun getLocalEmail(context: Context): String = AppPreferenceManager.getString(context, "email", "")
     fun getLocalRole(context: Context): String = AppPreferenceManager.getString(context, "role", "NOT_SET")
-    fun getLocalDeviceId(context: Context): String = AppPreferenceManager.getString(context, "device_id", "000000")
+    fun getLocalDeviceId(context: Context): String = AppPreferenceManager.getString(context, "device_id", "")
     fun getLocalTargetId(context: Context): String = AppPreferenceManager.getString(context, "target_id", "NOT_LINKED")
     fun getLocalCreatedAt(context: Context): Long = AppPreferenceManager.getLong(context, "created_at", 0L)
 

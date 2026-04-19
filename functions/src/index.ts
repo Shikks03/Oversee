@@ -1,23 +1,21 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { FirebaseError } from "firebase-admin/app";
 
 admin.initializeApp();
 
-/**
- * HTTPS-triggered Cloud Function.
- * Called by the child device when a HIGH severity word is detected.
- *
- * Body: { "device_id": "123456789" }
- *
- * Flow:
- * 1. Find the parent user where linked_child_id == device_id
- * 2. Get the parent's FCM token
- * 3. Send a data message to the parent device
- */
+const ALERT_SECRET = "oversee-alert-v1";
+const RATE_LIMIT_MS = 60_000;
+
 export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) => {
-  // Only allow POST
   if (req.method !== "POST") {
     res.status(405).send("Method Not Allowed");
+    return;
+  }
+
+  // #4 — Reject requests without valid shared secret
+  if (req.headers["x-oversee-secret"] !== ALERT_SECRET) {
+    res.status(401).send("Unauthorized");
     return;
   }
 
@@ -27,8 +25,9 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) 
     return;
   }
 
+  let parentDocRef: admin.firestore.DocumentReference | null = null;
+
   try {
-    // 1. Find parent user linked to this child device
     const parentQuery = await admin.firestore()
       .collection("users")
       .where("linked_child_id", "==", deviceId)
@@ -42,22 +41,33 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) 
       return;
     }
 
-    const parentData = parentQuery.docs[0].data();
-    const fcmToken: string = parentData.fcm_token;
+    const parentDoc = parentQuery.docs[0];
+    parentDocRef = parentDoc.ref;
+    const parentData = parentDoc.data();
 
-    if (!fcmToken) {
-      console.log(`Parent has no FCM token for device ${deviceId}`);
+    // #5 — Per-device rate limit: minimum 60 seconds between alerts
+    const lastAlertTs: number = parentData.last_alert_ts ?? 0;
+    const now = Date.now();
+    if (now - lastAlertTs < RATE_LIMIT_MS) {
+      console.log(`Rate limit hit for device ${deviceId}, skipping`);
+      res.status(200).send("Rate limited");
+      return;
+    }
+
+    // #12 — Reject non-string or empty fcm_token before sending
+    const fcmToken = parentData.fcm_token;
+    if (typeof fcmToken !== "string" || fcmToken.length === 0) {
+      console.log(`Parent has no valid FCM token for device ${deviceId}`);
       res.status(200).send("Parent has no FCM token");
       return;
     }
 
-    // 2. Send FCM data message to parent
+    // #17 — Omit child_device_id from push payload
     const message: admin.messaging.Message = {
       token: fcmToken,
       data: {
         type: "HIGH_SEVERITY_INCIDENT",
-        child_device_id: deviceId,
-        timestamp: String(Date.now()),
+        timestamp: String(now),
       },
       android: {
         priority: "high",
@@ -65,20 +75,27 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) 
     };
 
     await admin.messaging().send(message);
+    await parentDocRef.update({ last_alert_ts: now });
+
     console.log(`Alert sent to parent for device ${deviceId}`);
     res.status(200).send("Alert sent");
   } catch (error: unknown) {
-    // Handle stale/invalid FCM token gracefully
+    // #3 — Correct FirebaseError instanceof check for stale tokens
     if (
-      error instanceof Error &&
-      "code" in (error as NodeJS.ErrnoException) &&
-      (error as NodeJS.ErrnoException).code === "messaging/registration-token-not-registered"
+      error instanceof FirebaseError &&
+      error.code === "messaging/registration-token-not-registered"
     ) {
-      console.warn(`Stale FCM token for device ${deviceId}, skipping`);
+      // #7 — Purge stale token so future alerts don't hit the same dead token
+      if (parentDocRef) {
+        await parentDocRef.update({
+          fcm_token: admin.firestore.FieldValue.delete(),
+        });
+      }
+      console.warn(`Stale FCM token for device ${deviceId}, purged from Firestore`);
       res.status(200).send("Stale token, skipped");
     } else {
       console.error("Failed to send alert:", error);
-      res.status(500).send("Internal error");
+      return res.status(500).send("Internal error"); // #16 — return prevents latent double-response
     }
   }
 });

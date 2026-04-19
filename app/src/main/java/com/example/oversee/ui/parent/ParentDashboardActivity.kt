@@ -50,14 +50,13 @@ import com.example.oversee.data.AuthRepository
 import com.example.oversee.data.IncidentRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.ui.welcome.SignInActivity
+import com.google.firebase.auth.FirebaseAuth
 
 
 class ParentDashboardActivity : ComponentActivity() {
 
     // --- STATE MANAGEMENT ---
     private val currentTargetId = mutableStateOf("NOT_LINKED")
-    private val incidentsList = mutableStateOf<List<FirebaseSyncManager.LogEntry>>(emptyList())
-
     private var incidentList = mutableStateListOf<FirebaseSyncManager.LogEntry>()
      val isLoading = mutableStateOf(false)
     private var isRefreshing = mutableStateOf(false)
@@ -71,6 +70,13 @@ class ParentDashboardActivity : ComponentActivity() {
     // --- LIFECYCLE ---
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // #9 — Redirect to sign-in if no authenticated user
+        if (FirebaseAuth.getInstance().currentUser == null) {
+            startActivity(Intent(this, SignInActivity::class.java))
+            finish()
+            return
+        }
 
         // Request POST_NOTIFICATIONS permission on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -170,8 +176,8 @@ class ParentDashboardActivity : ComponentActivity() {
 
     private fun linkChild(newChildId: String) {
         val uid = AuthRepository.getUserId() ?: return
-        if (newChildId.length != 6) {
-            Toast.makeText(this, "ID must be 6 digits", Toast.LENGTH_SHORT).show()
+        if (newChildId.length != 9) {
+            Toast.makeText(this, "ID must be 9 digits", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -202,7 +208,8 @@ class ParentDashboardActivity : ComponentActivity() {
             childId = target,
             onSuccess = { logs ->
                 isLoading.value = false
-                incidentsList.value = logs
+                incidentList.clear()
+                incidentList.addAll(logs)
             },
             onError = { error ->
                 isLoading.value = false

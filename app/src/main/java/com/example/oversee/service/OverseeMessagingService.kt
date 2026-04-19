@@ -27,8 +27,15 @@ class OverseeMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM token refreshed")
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        FcmTokenManager.refreshAndStoreToken(uid)
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        if (uid != null) {
+            FcmTokenManager.refreshAndStoreToken(uid)
+        } else {
+            // #6 — Queue token locally; AuthRepository.signIn will upload it after auth
+            getSharedPreferences("AppConfig", MODE_PRIVATE)
+                .edit().putString("pending_fcm_token", token).apply()
+            Log.d(TAG, "User not logged in, FCM token queued for next sign-in")
+        }
     }
 
     /**

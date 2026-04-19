@@ -36,7 +36,7 @@ object FcmTokenManager {
      * Removes the FCM token from Firestore on logout so stale tokens aren't used.
      */
     fun clearToken(uid: String) {
-        FirebaseUserManager.updateProfileField(uid, FIELD_FCM_TOKEN, "") { success ->
+        FirebaseUserManager.deleteProfileField(uid, FIELD_FCM_TOKEN) { success ->
             if (!success) Log.w(TAG, "Failed to clear FCM token from Firestore")
         }
     }

@@ -1,6 +1,7 @@
 package com.example.oversee.data.remote
 
 import android.util.Log
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 
@@ -30,6 +31,16 @@ object FirebaseUserManager {
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { e ->
                 Log.e("FirebaseUserManager", "updateProfileField failed: uid=$uid field=$field", e)
+                onComplete(false)
+            }
+    }
+
+    fun deleteProfileField(uid: String, field: String, onComplete: (Boolean) -> Unit) {
+        db.collection("users").document(uid)
+            .update(mapOf(field to FieldValue.delete()))
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                Log.e("FirebaseUserManager", "deleteProfileField failed: uid=$uid field=$field", e)
                 onComplete(false)
             }
     }

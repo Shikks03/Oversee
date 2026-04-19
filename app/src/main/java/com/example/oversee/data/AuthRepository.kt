@@ -18,7 +18,17 @@ object AuthRepository {
             if (success) {
                 val uid = getUserId() ?: return@signIn
                 UserRepository.refreshLocalProfile(context, uid) {
-                    FcmTokenManager.refreshAndStoreToken(uid)
+                    // #6 — Upload any token that rotated while the user was logged out
+                    val prefs = context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                    val pendingToken = prefs.getString("pending_fcm_token", null)
+                    if (pendingToken != null) {
+                        com.example.oversee.data.remote.FirebaseUserManager
+                            .updateProfileField(uid, "fcm_token", pendingToken) { _ ->
+                                prefs.edit().remove("pending_fcm_token").apply()
+                            }
+                    } else {
+                        FcmTokenManager.refreshAndStoreToken(uid)
+                    }
                     onResult(true, null)
                 }
             } else {
