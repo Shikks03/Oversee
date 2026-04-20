@@ -8,7 +8,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.oversee.R
-import com.example.oversee.data.remote.FcmTokenManager
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.ui.parent.ParentDashboardActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
@@ -20,18 +20,21 @@ class OverseeMessagingService : FirebaseMessagingService() {
     private val CHANNEL_ID = "incident_alerts"
     private val NOTIFICATION_ID = 1001
 
-    /**
-     * Called when FCM assigns or rotates the device token.
-     * Stores the new token in Firestore if the user is currently logged in.
-     */
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM token refreshed")
         val uid = FirebaseAuth.getInstance().currentUser?.uid
         if (uid != null) {
-            FcmTokenManager.refreshAndStoreToken(uid)
+            DeviceRepository.getFid { fid ->
+                if (fid != null) {
+                    DeviceRepository.refreshFcmToken(uid, fid, token) { success ->
+                        if (!success) Log.w(TAG, "Failed to store rotated FCM token")
+                    }
+                } else {
+                    Log.w(TAG, "Could not get FID to store rotated FCM token")
+                }
+            }
         } else {
-            // #6 — Queue token locally; AuthRepository.signIn will upload it after auth
             getSharedPreferences("AppConfig", MODE_PRIVATE)
                 .edit().putString("pending_fcm_token", token).apply()
             Log.d(TAG, "User not logged in, FCM token queued for next sign-in")

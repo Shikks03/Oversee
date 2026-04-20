@@ -12,13 +12,13 @@ import com.google.firebase.firestore.Query
 object FirebaseIncidentManager {
     private val db = FirebaseFirestore.getInstance()
 
-    fun fetchIncidents(context: Context, childId: String, onResult: (List<FirebaseSyncManager.LogEntry>?, String?) -> Unit) {
-        db.collection("monitor_sessions").document(childId).collection("logs")
+    fun fetchIncidents(context: Context, childFid: String, onResult: (List<FirebaseSyncManager.LogEntry>?, String?) -> Unit) {
+        db.collection("monitor_sessions").document(childFid).collection("logs")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
             .get()
             .addOnSuccessListener { documents ->
-                KeyManager.getOrCreateKey(context, childId) { key ->
+                KeyManager.getOrCreateKey(context, childFid) { key ->
                     val list = documents.map { doc ->
                         val isEncrypted = doc.getBoolean("encrypted") ?: false
                         if (isEncrypted) {

@@ -2,6 +2,7 @@ package com.example.oversee.data.remote
 
 import android.content.Context
 import android.util.Log
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.local.CryptoManager
 import com.example.oversee.data.local.KeyManager
 import com.google.firebase.firestore.FirebaseFirestore
@@ -23,7 +24,6 @@ object FirebaseSyncManager {
     private const val TAG = "FirebaseSync"
     private const val PREFS_NAME = "SyncPrefs"
     private const val KEY_LAST_SYNC = "last_sync_time"
-    private const val KEY_DEVICE_ID = "device_id"
     private const val COLLECTION_SESSIONS = "monitor_sessions"
     private const val SUBCOL_LOGS = "logs"
 
@@ -42,19 +42,22 @@ object FirebaseSyncManager {
         }
 
         Log.d(TAG, "☁️ Syncing ${newLogs.size} incidents to Cloud...")
-        uploadBatch(context, newLogs)
+        DeviceRepository.getFid { fid ->
+            if (fid == null) {
+                Log.w(TAG, "FID unavailable, skipping sync")
+                return@getFid
+            }
+            uploadBatch(context, newLogs, fid)
+        }
     }
 
     // --- PRIVATE HELPERS ---
 
-    private fun uploadBatch(context: Context, logs: List<LogEntry>) {
-        val deviceId = getDeviceId(context)
-
-        KeyManager.getOrCreateKey(context, deviceId) { key ->
+    private fun uploadBatch(context: Context, logs: List<LogEntry>, fid: String) {
+        KeyManager.getOrCreateKey(context, fid) { key ->
             val db = FirebaseFirestore.getInstance()
 
-            // Reference: monitor_sessions/{DEVICE_ID}
-            val userDocRef = db.collection(COLLECTION_SESSIONS).document(deviceId)
+            val userDocRef = db.collection(COLLECTION_SESSIONS).document(fid)
             val batch = db.batch()
 
             // Create a new document in the "logs" sub-collection for each incident
@@ -72,22 +75,15 @@ object FirebaseSyncManager {
                 batch.set(newDocRef, dataMap)
             }
 
-            // Commit all writes at once (Atomic Operation)
             batch.commit()
                 .addOnSuccessListener {
                     Log.d(TAG, "✅ Cloud Sync Complete!")
-                    // Update the checkpoint so we don't re-upload these
                     saveLastSyncTime(context, System.currentTimeMillis())
                 }
                 .addOnFailureListener { e ->
                     Log.e(TAG, "❌ Cloud Sync Failed", e)
                 }
         }
-    }
-
-    private fun getDeviceId(context: Context): String {
-        return context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-            .getString(KEY_DEVICE_ID, "unknown_device") ?: "unknown_device"
     }
 
     // --- FILE PARSING ---

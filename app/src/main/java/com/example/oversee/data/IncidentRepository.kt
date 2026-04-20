@@ -26,16 +26,16 @@ object IncidentRepository {
     // Fetch logic for Parent device
     fun fetchRecentIncidents(
         context: Context,
-        childId: String,
+        childFid: String,
         onSuccess: (List<FirebaseSyncManager.LogEntry>) -> Unit,
         onError: (String) -> Unit
     ) {
-        if (childId == "NOT_LINKED" || childId.isBlank()) {
+        if (childFid.isBlank()) {
             onSuccess(emptyList())
             return
         }
 
-        FirebaseIncidentManager.fetchIncidents(context, childId) { list, error ->
+        FirebaseIncidentManager.fetchIncidents(context, childFid) { list, error ->
             if (list != null) onSuccess(list)
             else onError(error ?: "Unknown error")
         }

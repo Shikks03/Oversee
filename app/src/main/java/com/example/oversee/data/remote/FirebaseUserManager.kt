@@ -9,6 +9,7 @@ import com.google.firebase.firestore.SetOptions
  * Technical implementation of Firestore operations for User data.
  */
 object FirebaseUserManager {
+    private const val TAG = "FirebaseUserManager"
     private val db = FirebaseFirestore.getInstance()
 
     // Technical Task: Create or Overwrite document
@@ -30,7 +31,7 @@ object FirebaseUserManager {
             .set(mapOf(field to value), SetOptions.merge())
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { e ->
-                Log.e("FirebaseUserManager", "updateProfileField failed: uid=$uid field=$field", e)
+                Log.e(TAG, "updateProfileField failed: uid=$uid field=$field", e)
                 onComplete(false)
             }
     }
@@ -40,17 +41,21 @@ object FirebaseUserManager {
             .update(mapOf(field to FieldValue.delete()))
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { e ->
-                Log.e("FirebaseUserManager", "deleteProfileField failed: uid=$uid field=$field", e)
+                Log.e(TAG, "deleteProfileField failed: uid=$uid field=$field", e)
                 onComplete(false)
             }
     }
 
-    // Generates a 9-digit ID derived from a UUID (128-bit random).
-    // No Firestore query needed — collision probability is negligible.
-    fun generateUniqueDeviceId(onResult: (String) -> Unit) {
-        val uuid = java.util.UUID.randomUUID()
-        val bits = (uuid.mostSignificantBits xor uuid.leastSignificantBits) and Long.MAX_VALUE
-        val id = (100_000_000L + (bits % 900_000_000L)).toString()
-        onResult(id)
+    fun fetchDeviceFidPointers(uid: String, onResult: (parentFid: String?, childFid: String?) -> Unit) {
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { doc ->
+                val parentFid = doc.getString("parent_device_fid")
+                val childFid = doc.getString("child_device_fid")
+                onResult(parentFid, childFid)
+            }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "fetchDeviceFidPointers failed: uid=$uid", e)
+                onResult(null, null)
+            }
     }
 }

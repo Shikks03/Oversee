@@ -29,4 +29,11 @@ object AppPreferenceManager {
     fun clearAll(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit { clear() }
     }
+
+    fun migrateStaleKeys(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+            remove("device_id")
+            remove("target_id")
+        }
+    }
 }

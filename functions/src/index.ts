@@ -13,56 +13,72 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) 
     return;
   }
 
-  // #4 — Reject requests without valid shared secret
   if (req.headers["x-oversee-secret"] !== ALERT_SECRET) {
     res.status(401).send("Unauthorized");
     return;
   }
 
-  const deviceId: string = req.body?.device_id;
-  if (!deviceId) {
-    res.status(400).send("Missing device_id");
+  const uid: string = req.body?.uid;
+  const childFid: string = req.body?.child_fid;
+  if (!uid || !childFid) {
+    res.status(400).send("Missing uid or child_fid");
     return;
   }
 
-  let parentDocRef: admin.firestore.DocumentReference | null = null;
+  let parentDeviceRef: admin.firestore.DocumentReference | null = null;
 
   try {
-    const parentQuery = await admin.firestore()
+    const userDoc = await admin.firestore()
       .collection("users")
-      .where("linked_child_id", "==", deviceId)
-      .where("role", "==", "parent")
-      .limit(1)
+      .doc(uid)
       .get();
 
-    if (parentQuery.empty) {
-      console.log(`No parent linked to device ${deviceId}`);
+    if (!userDoc.exists) {
+      console.log(`No user document found for uid ${uid}`);
       res.status(200).send("No parent linked");
       return;
     }
 
-    const parentDoc = parentQuery.docs[0];
-    parentDocRef = parentDoc.ref;
-    const parentData = parentDoc.data();
+    const userData = userDoc.data()!;
+    const parentDeviceFid: string | undefined = userData.parent_device_fid;
 
-    // #5 — Per-device rate limit: minimum 60 seconds between alerts
-    const lastAlertTs: number = parentData.last_alert_ts ?? 0;
+    if (!parentDeviceFid) {
+      console.log(`No parent_device_fid on user ${uid}`);
+      res.status(200).send("No parent linked");
+      return;
+    }
+
+    const parentDeviceDoc = await admin.firestore()
+      .collection("users")
+      .doc(uid)
+      .collection("devices")
+      .doc(parentDeviceFid)
+      .get();
+
+    if (!parentDeviceDoc.exists) {
+      console.log(`Parent device doc missing for uid ${uid}, fid ${parentDeviceFid}`);
+      res.status(200).send("No parent linked");
+      return;
+    }
+
+    parentDeviceRef = parentDeviceDoc.ref;
+    const parentDeviceData = parentDeviceDoc.data()!;
+
+    const lastAlertTs: number = parentDeviceData.last_alert_ts ?? 0;
     const now = Date.now();
     if (now - lastAlertTs < RATE_LIMIT_MS) {
-      console.log(`Rate limit hit for device ${deviceId}, skipping`);
+      console.log(`Rate limit hit for uid ${uid}, skipping`);
       res.status(200).send("Rate limited");
       return;
     }
 
-    // #12 — Reject non-string or empty fcm_token before sending
-    const fcmToken = parentData.fcm_token;
+    const fcmToken = parentDeviceData.fcm_token;
     if (typeof fcmToken !== "string" || fcmToken.length === 0) {
-      console.log(`Parent has no valid FCM token for device ${deviceId}`);
-      res.status(200).send("Parent has no FCM token");
+      console.log(`Parent has no valid FCM token for uid ${uid}`);
+      res.status(200).send("No parent linked");
       return;
     }
 
-    // #17 — Omit child_device_id from push payload
     const message: admin.messaging.Message = {
       token: fcmToken,
       data: {
@@ -75,27 +91,25 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) 
     };
 
     await admin.messaging().send(message);
-    await parentDocRef.update({ last_alert_ts: now });
+    await parentDeviceRef.update({ last_alert_ts: now });
 
-    console.log(`Alert sent to parent for device ${deviceId}`);
+    console.log(`Alert sent to parent for uid ${uid}, child_fid ${childFid}`);
     res.status(200).send("Alert sent");
   } catch (error: unknown) {
-    // #3 — Correct FirebaseError instanceof check for stale tokens
     if (
       error instanceof FirebaseError &&
       error.code === "messaging/registration-token-not-registered"
     ) {
-      // #7 — Purge stale token so future alerts don't hit the same dead token
-      if (parentDocRef) {
-        await parentDocRef.update({
+      if (parentDeviceRef) {
+        await parentDeviceRef.update({
           fcm_token: admin.firestore.FieldValue.delete(),
         });
       }
-      console.warn(`Stale FCM token for device ${deviceId}, purged from Firestore`);
+      console.warn(`Stale FCM token for uid ${uid}, purged from Firestore`);
       res.status(200).send("Stale token, skipped");
     } else {
       console.error("Failed to send alert:", error);
-      return res.status(500).send("Internal error"); // #16 — return prevents latent double-response
+      return res.status(500).send("Internal error");
     }
   }
 });
