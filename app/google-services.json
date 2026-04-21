@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "20714313462",
+    "project_id": "oversee-thesis",
+    "storage_bucket": "oversee-thesis.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:20714313462:android:9a424e16ea39714a57fed7",
+        "android_client_info": {
+          "package_name": "com.example.oversee"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "20714313462-n10j383n2seh8mhj1e3hcpelikai3i8g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3SH85l3CR_aDxEpUUer88IyLKxDAkAiY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "20714313462-n10j383n2seh8mhj1e3hcpelikai3i8g.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
