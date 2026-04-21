@@ -47,12 +47,14 @@ import com.example.oversee.data.AuthRepository
 import com.example.oversee.data.IncidentRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.data.remote.FirebaseUserManager
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 
 
 class ParentDashboardActivity : ComponentActivity() {
 
     // --- STATE MANAGEMENT ---
+    private val TAG = "ParentDashboard"
     private val childFid = mutableStateOf<String?>(null)
     private var incidentList = mutableStateListOf<FirebaseSyncManager.LogEntry>()
     private var isRefreshing = mutableStateOf(false)
@@ -88,7 +90,8 @@ class ParentDashboardActivity : ComponentActivity() {
                 val fid = childFid.value
                 if (fid == null) {
                     ChildNotLinkedScreen(
-                        onLogout = { performLogout() }
+                        onLogout = { performLogout() },
+                        onCheckAgain = { loadChildFid() }
                     )
                 } else {
                     ParentDashboardScreen(
@@ -116,25 +119,35 @@ class ParentDashboardActivity : ComponentActivity() {
     // --- DATA LOGIC ---
 
     private fun loadChildFid(autoRefresh: Boolean = false) {
-        val uid = AuthRepository.getUserId() ?: return
+        val uid = AuthRepository.getUserId() ?: run {
+            Log.e(TAG, "DIAG L1: uid is null — user not authenticated")
+            return
+        }
+        Log.d(TAG, "DIAG L1: fetching FID pointers for uid=$uid")
         FirebaseUserManager.fetchDeviceFidPointers(uid) { _, cFid ->
+            Log.d(TAG, "DIAG L2: childFid from Firestore = $cFid")
             childFid.value = cFid
             if (cFid != null) {
                 fetchLogs(cFid)
                 if (autoRefresh) refreshDashboard()
+            } else {
+                Log.w(TAG, "DIAG L2: childFid is null — child device not linked yet")
             }
         }
     }
 
     private fun fetchLogs(fid: String) {
+        Log.d(TAG, "DIAG L3: fetchLogs called with fid=$fid")
         IncidentRepository.fetchRecentIncidents(
             context = this,
             childFid = fid,
             onSuccess = { logs ->
+                Log.d(TAG, "DIAG L4: fetchLogs returned ${logs.size} entries")
                 incidentList.clear()
                 incidentList.addAll(logs)
             },
             onError = { error ->
+                Log.e(TAG, "DIAG L4: fetchLogs error: $error")
                 Toast.makeText(this, "Error: $error", Toast.LENGTH_SHORT).show()
             }
         )
@@ -142,16 +155,19 @@ class ParentDashboardActivity : ComponentActivity() {
 
     private fun refreshDashboard() {
         val fid = childFid.value ?: return
+        Log.d(TAG, "DIAG L3: refreshDashboard called with fid=$fid")
         isRefreshing.value = true
         IncidentRepository.fetchRecentIncidents(
             context = this,
             childFid = fid,
             onSuccess = { logs ->
+                Log.d(TAG, "DIAG L4: refreshDashboard returned ${logs.size} entries")
                 incidentList.clear()
                 incidentList.addAll(logs)
                 isRefreshing.value = false
             },
             onError = { error ->
+                Log.e(TAG, "DIAG L4: refreshDashboard error: $error")
                 isRefreshing.value = false
                 Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
             }
@@ -174,7 +190,7 @@ class ParentDashboardActivity : ComponentActivity() {
 // --- COMPOSE UI SCREENS ---
 
 @Composable
-fun ChildNotLinkedScreen(onLogout: () -> Unit) {
+fun ChildNotLinkedScreen(onLogout: () -> Unit, onCheckAgain: () -> Unit) {
     val hPad = com.example.oversee.ui.theme.Responsive.horizontalPadding()
     val vPad = com.example.oversee.ui.theme.Responsive.verticalPadding()
 
@@ -207,6 +223,15 @@ fun ChildNotLinkedScreen(onLogout: () -> Unit) {
                 color = Color.Gray
             )
             Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = onCheckAgain,
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Check Again", fontWeight = FontWeight.Bold)
+            }
             androidx.compose.material3.TextButton(onClick = onLogout) {
                 Text("Not your account? Logout", color = Color.Gray)
             }
@@ -493,7 +518,7 @@ fun ParentDashboardPreview() {
 @Composable
 fun ChildNotLinkedScreenPreview() {
     MaterialTheme {
-        ChildNotLinkedScreen(onLogout = {})
+        ChildNotLinkedScreen(onLogout = {}, onCheckAgain = {})
     }
 }
 

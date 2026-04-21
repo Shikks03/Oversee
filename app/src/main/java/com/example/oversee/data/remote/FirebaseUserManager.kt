@@ -54,7 +54,7 @@ object FirebaseUserManager {
                 onResult(parentFid, childFid)
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "fetchDeviceFidPointers failed: uid=$uid", e)
+                Log.e(TAG, "fetchDeviceFidPointers FAILED: uid=$uid error=${e.message}", e)
                 onResult(null, null)
             }
     }

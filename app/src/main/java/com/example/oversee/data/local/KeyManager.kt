@@ -21,13 +21,15 @@ object KeyManager {
     private const val COLLECTION_SESSIONS = "monitor_sessions"
     private const val FIELD_KEY = "encryption_key"
 
-    // In-memory cache to avoid repeated Firestore reads within a session
+    // In-memory cache keyed by deviceId — avoids confusing parent and child keys
+    private val keyCache = mutableMapOf<String, SecretKey>()
+
+    // Single-key cache used only by the child device (getOrCreateKey)
     private var cachedKey: SecretKey? = null
 
     /**
-     * Returns the encryption key for the given device_id.
-     * Checks memory → local SharedPreferences → Firestore.
-     * If not found anywhere, generates a new key and persists it.
+     * Child-device path: generates a new key if none exists anywhere.
+     * DO NOT call this on the parent device.
      */
     fun getOrCreateKey(context: Context, deviceId: String, onReady: (SecretKey) -> Unit) {
         cachedKey?.let { onReady(it); return }
@@ -55,6 +57,51 @@ object KeyManager {
                 onReady(newKey)
             }
         }
+    }
+
+    /**
+     * Parent-device path: fetches the child's key from Firestore only.
+     * Returns null if the key is not found — never generates a new key.
+     * Uses per-deviceId caching so parent and child keys never collide.
+     */
+    fun getKeyForDevice(context: Context, deviceId: String, onReady: (SecretKey?) -> Unit) {
+        keyCache[deviceId]?.let { onReady(it); return }
+
+        val localKey = loadLocalKeyForDevice(context, deviceId)
+        if (localKey != null) {
+            keyCache[deviceId] = localKey
+            onReady(localKey)
+            return
+        }
+
+        fetchKeyFromFirestore(deviceId) { remoteKey ->
+            if (remoteKey != null) {
+                storeLocalKeyForDevice(context, deviceId, remoteKey)
+                keyCache[deviceId] = remoteKey
+            } else {
+                Log.w(TAG, "No encryption key found in Firestore for deviceId=$deviceId")
+            }
+            onReady(remoteKey)
+        }
+    }
+
+    private fun loadLocalKeyForDevice(context: Context, deviceId: String): SecretKey? {
+        val encoded = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("key_$deviceId", null) ?: return null
+        return try {
+            CryptoManager.keyFromBytes(Base64.decode(encoded, Base64.NO_WRAP))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load local key for deviceId=$deviceId", e)
+            null
+        }
+    }
+
+    private fun storeLocalKeyForDevice(context: Context, deviceId: String, key: SecretKey) {
+        val encoded = Base64.encodeToString(key.encoded, Base64.NO_WRAP)
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString("key_$deviceId", encoded)
+            .apply()
     }
 
     fun storeKeyLocally(context: Context, key: SecretKey) {
@@ -115,8 +162,9 @@ object KeyManager {
             }
     }
 
-    /** Clears cached key from memory (call on logout). */
+    /** Clears all in-memory cached keys (call on logout). */
     fun clearCache() {
         cachedKey = null
+        keyCache.clear()
     }
 }
