@@ -1,13 +1,12 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import { FirebaseError } from "firebase-admin/app";
 
 admin.initializeApp();
 
 const ALERT_SECRET = "oversee-alert-v1";
 const RATE_LIMIT_MS = 60_000;
 
-export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) => {
+export const sendHighSeverityAlert = functions.https.onRequest(async (req, res): Promise<void> => {
   if (req.method !== "POST") {
     res.status(405).send("Method Not Allowed");
     return;
@@ -97,8 +96,7 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) 
     res.status(200).send("Alert sent");
   } catch (error: unknown) {
     if (
-      error instanceof FirebaseError &&
-      error.code === "messaging/registration-token-not-registered"
+      (error as any)?.code === "messaging/registration-token-not-registered"
     ) {
       if (parentDeviceRef) {
         await parentDeviceRef.update({
@@ -109,7 +107,7 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res) 
       res.status(200).send("Stale token, skipped");
     } else {
       console.error("Failed to send alert:", error);
-      return res.status(500).send("Internal error");
+      res.status(500).send("Internal error");
     }
   }
 });
