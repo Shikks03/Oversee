@@ -79,14 +79,15 @@ object ToxicityScorer {
             if (offset == 0) continue
             val idx = tokenIndex + offset
             if (idx < 0 || idx >= rawTokens.size) continue
-            if (rawTokens[idx].lowercase(Locale.getDefault()) in personDirectedWords) return true
+            val normalized = rawTokens[idx].lowercase(Locale.getDefault()).trimEnd { !it.isLetterOrDigit() }
+            if (normalized in personDirectedWords) return true
         }
         return false
     }
 
     private fun classifySeverity(score: Int): String = when {
-        score <= 2 -> "Mild"
-        score <= 4 -> "Moderate"
+        score == 1 -> "Mild"
+        score <= 3 -> "Moderate"
         else       -> "Severe"
     }
 }
