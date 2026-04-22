@@ -6,6 +6,7 @@ import com.example.oversee.data.local.CryptoManager
 import com.example.oversee.data.local.KeyManager
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.Source
 
 /**
  * Technical implementation of Firestore operations for Incident logs.
@@ -18,7 +19,7 @@ object FirebaseIncidentManager {
         db.collection("monitor_sessions").document(childFid).collection("logs")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
-            .get()
+            .get(Source.SERVER)
             .addOnSuccessListener { documents ->
                 Log.d(TAG, "DIAG L3: Firestore returned ${documents.size()} raw documents for fid=$childFid")
                 KeyManager.getKeyForDevice(context, childFid) { key ->

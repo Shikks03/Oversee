@@ -29,15 +29,15 @@ object FirebaseSyncManager {
 
     // --- PUBLIC API ---
 
-    fun syncPendingLogs(context: Context) {
+    fun syncPendingLogs(context: Context, onDone: ((uploaded: Int, error: String?) -> Unit)? = null) {
         val lastSyncTime = getLastSyncTime(context)
         val allLogs = parseLocalLogs(context)
 
-        // Filter: Keep only logs newer than the last successful sync
         val newLogs = allLogs.filter { it.timestamp > lastSyncTime }
 
         if (newLogs.isEmpty()) {
             Log.d(TAG, "☁️ Sync skipped: No new logs.")
+            onDone?.invoke(0, null)
             return
         }
 
@@ -45,15 +45,16 @@ object FirebaseSyncManager {
         DeviceRepository.getFid { fid ->
             if (fid == null) {
                 Log.w(TAG, "FID unavailable, skipping sync")
+                onDone?.invoke(0, "Device ID unavailable")
                 return@getFid
             }
-            uploadBatch(context, newLogs, fid)
+            uploadBatch(context, newLogs, fid, onDone)
         }
     }
 
     // --- PRIVATE HELPERS ---
 
-    private fun uploadBatch(context: Context, logs: List<LogEntry>, fid: String) {
+    private fun uploadBatch(context: Context, logs: List<LogEntry>, fid: String, onDone: ((uploaded: Int, error: String?) -> Unit)? = null) {
         KeyManager.getOrCreateKey(context, fid) { key ->
             val db = FirebaseFirestore.getInstance()
 
@@ -79,9 +80,11 @@ object FirebaseSyncManager {
                 .addOnSuccessListener {
                     Log.d(TAG, "✅ Cloud Sync Complete!")
                     saveLastSyncTime(context, System.currentTimeMillis())
+                    onDone?.invoke(logs.size, null)
                 }
                 .addOnFailureListener { e ->
                     Log.e(TAG, "❌ Cloud Sync Failed", e)
+                    onDone?.invoke(0, e.message ?: "Upload failed")
                 }
         }
     }
