@@ -32,7 +32,8 @@ import androidx.savedstate.*
 // --- PROJECT IMPORTS ---
 import com.example.oversee.data.IncidentRepository
 import com.example.oversee.data.model.Incident
-import com.example.oversee.domain.ContentAnalyzer // Using your TextAnalyzer
+import com.example.oversee.domain.TextAnalysisEngine
+import com.example.oversee.domain.ToxicityScorer
 import com.example.oversee.utils.sendConsoleUpdate // Import the extension we made earlier
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
@@ -59,6 +60,7 @@ class ScreenCaptureService : Service() {
     private val successCaptureCount = AtomicInteger(0)
     private val ocrFinishedCount = AtomicInteger(0)
     private var tess: TessBaseAPI? = null // Persistent instance
+    private lateinit var textAnalysisEngine: TextAnalysisEngine
 
     // Debounce Map: Stores "badword" -> Last Time Seen
     private val debounceMap = ConcurrentHashMap<String, Long>()
@@ -74,7 +76,7 @@ class ScreenCaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         prepareTesseract() // Copy assets first
-        ContentAnalyzer.init(this)
+        textAnalysisEngine = TextAnalysisEngine.fromAssets(this)
         tess = TessBaseAPI().apply {
             init(filesDir.absolutePath, "eng")
         }
@@ -194,31 +196,24 @@ class ScreenCaptureService : Service() {
             val duration = System.currentTimeMillis() - startTime
 
             if (!text.isNullOrBlank()) {
-                // 3. Analyze text for inappropriate words
-                val result = ContentAnalyzer.analyze(text)
-
+                val analysisResult = textAnalysisEngine.analyze(text)
+                val scoredWords = ToxicityScorer.score(analysisResult)
                 Log.d(TAG, "OCR Text: $text")
-                if (!result.isClean) {
-                    result.incidents.forEach { incident ->
-
-                        // 4. Debounce: Check if we've seen this word in the last 10s
-                        val lastSeen = debounceMap[incident.word] ?: 0L
+                if (scoredWords.isNotEmpty()) {
+                    scoredWords.forEach { scored ->
+                        val lastSeen = debounceMap[scored.matchedWord] ?: 0L
                         val currentTime = System.currentTimeMillis()
-
-                        if (currentTime - lastSeen > 10_000L) { // 10s Debounce
-                            debounceMap[incident.word] = currentTime
-
-                            // 5. Save and Sync
-                            // High severity logic is handled inside saveIncident
+                        if (currentTime - lastSeen > 10_000L) {
+                            debounceMap[scored.matchedWord] = currentTime
+                            val severity = mapSeverity(scored.severity)
                             IncidentRepository.saveIncident(
                                 applicationContext,
-                                Incident(incident.word, incident.severity, "Facebook")
+                                Incident(scored.matchedWord, severity, "Facebook")
                             )
-
-                            sendConsoleUpdate("FLAG: '${incident.word}' (${incident.severity}) detected in ${duration}ms")
-                            Log.d(TAG,"FLAG: '${incident.word}' (${incident.severity}) detected in ${duration}ms" )
-                        }else{
-                            Log.d(TAG, "Debounced ${incident.word}")
+                            sendConsoleUpdate("FLAG: '${scored.matchedWord}' ($severity, score=${scored.toxicityScore}) detected in ${duration}ms")
+                            Log.d(TAG, "FLAG: '${scored.matchedWord}' ($severity, score=${scored.toxicityScore}) detected in ${duration}ms")
+                        } else {
+                            Log.d(TAG, "Debounced ${scored.matchedWord}")
                         }
                     }
                 }
@@ -307,6 +302,13 @@ class ScreenCaptureService : Service() {
         tess?.end()
         ocrExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun mapSeverity(scorerSeverity: String): String = when (scorerSeverity) {
+        "Severe"   -> "HIGH"
+        "Moderate" -> "MEDIUM"
+        "Mild"     -> "LOW"
+        else       -> "LOW"
     }
 
     // Global States

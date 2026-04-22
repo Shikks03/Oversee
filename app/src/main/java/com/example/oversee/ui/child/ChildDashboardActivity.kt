@@ -135,8 +135,16 @@ class ChildDashboardActivity : ComponentActivity() {
     }
 
     private fun triggerSync() {
-        FirebaseSyncManager.syncPendingLogs(this)
-        addToConsole("Sync Event: Manual cloud synchronization triggered.")
+        addToConsole("Sync Event: Syncing to cloud...")
+        FirebaseSyncManager.syncPendingLogs(this) { uploaded, error ->
+            runOnUiThread {
+                when {
+                    error != null -> addToConsole("Sync Event: Sync failed — $error")
+                    uploaded == 0 -> addToConsole("Sync Event: Already up to date.")
+                    else -> addToConsole("Sync Event: Sync complete — $uploaded incident(s) uploaded.")
+                }
+            }
+        }
     }
 
     private fun addToConsole(message: String) {
