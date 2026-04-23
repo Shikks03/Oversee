@@ -4,7 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import com.example.oversee.utils.sendConsoleUpdate // Import extension
+import android.view.accessibility.AccessibilityWindowInfo
+import com.example.oversee.utils.sendConsoleUpdate
 
 class FacebookAccessibilityService : AccessibilityService() {
 
@@ -17,6 +18,16 @@ class FacebookAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // Step 5: update keyboard visibility on every window-state change.
+        // Accessibility window list is authoritative and handles floating/split-screen keyboards.
+        val eventType = event?.eventType
+        if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+            eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            ScreenCaptureService.ScreenState.isKeyboardVisible = windows?.any {
+                it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD
+            } == true
+        }
+
         val pkg = event?.packageName?.toString()
 
         if (pkg != null && (pkg.contains("facebook") || pkg.contains("katana") || pkg.contains("lite"))) {

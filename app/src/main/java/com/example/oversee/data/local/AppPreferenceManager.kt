@@ -26,6 +26,22 @@ object AppPreferenceManager {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getLong(key, defaultValue)
     }
 
+    fun saveBoolean(context: Context, key: String, value: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit { putBoolean(key, value) }
+    }
+
+    fun getBoolean(context: Context, key: String, defaultValue: Boolean): Boolean {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(key, defaultValue)
+    }
+
+    fun saveStringSet(context: Context, key: String, value: Set<String>) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit { putStringSet(key, value) }
+    }
+
+    fun getStringSet(context: Context, key: String, defaultValue: Set<String>): Set<String> {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getStringSet(key, defaultValue) ?: defaultValue
+    }
+
     fun clearAll(context: Context) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit { clear() }
     }
