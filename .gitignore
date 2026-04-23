@@ -33,3 +33,7 @@ copilot-instructions.md
 
 # Planning/AI docs
 docs/superpowers/
+
+# JVM crash dumps
+hs_err_pid*.log
+replay_pid*.log

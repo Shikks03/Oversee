@@ -42,4 +42,21 @@ object UserRepository {
     fun clearLocalData(context: Context) {
         AppPreferenceManager.clearAll(context)
     }
+
+    fun getLocalTargetId(context: Context): String =
+        if (getLocalRole(context) == "CHILD") "LINKED" else "NOT_LINKED"
+
+    fun initializeDeviceId(context: Context, uid: String, onComplete: (String) -> Unit) {
+        DeviceRepository.getFid { fid -> onComplete(fid ?: "UNKNOWN") }
+    }
+
+    fun updateDeviceId(context: Context, uid: String, newId: String, onComplete: (Boolean) -> Unit) {
+        onComplete(false)
+    }
+
+    fun linkChildDevice(context: Context, uid: String, childFid: String, onComplete: (Boolean) -> Unit) {
+        FirebaseUserManager.updateProfileField(uid, "child_device_fid", childFid) { success ->
+            onComplete(success)
+        }
+    }
 }

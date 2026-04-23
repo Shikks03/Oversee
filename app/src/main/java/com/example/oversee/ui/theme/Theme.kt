@@ -2,6 +2,7 @@ package com.example.oversee.ui.theme
 
 // --- COMPOSE UI ---
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
@@ -16,20 +17,22 @@ import androidx.compose.ui.unit.*
  */
 object AppTheme {
     // Colors (Refined from original XML hex values)
-    val Background = Color(0xFFF2F2F2) // Light Blue
+    val Background = Color(0xFFEDF2F6) // Light Blue
     val SecBackground = Color(0xFF457cba) // Dark Blue
     val Surface = Color(0xFFFFFFFF)    // Pure White
-    val Primary = Color(0xFF2196F3)    // Parent Blue
+    val Primary = Color(0xFF5AAFF1)    // Parent Blue
+    val PrimaryGradient = Brush.verticalGradient(listOf(Color(0xFF59CAFF), Color(0xFF5AAFF1), Color(0xFF0F51A2)))
     val Success = Color(0xFF4CAF50)    // Child Green
     val Warning = Color(0xFFFFA000)    // Medium Severity
     val Error = Color(0xFFD32F2F)      // High Severity
-    val Border = Color(0xFFD9D9D9)     // Default Stroke
+    val Border = Color(0xFFFFFFFF)     // Default Stroke
 
     val TextPrimary =  Color(0xFF000000) // Black
     val TextTertiary =  Color(0xFFB3B3B3) // Grey
 
     // Spacing & Sizing
     val PaddingDefault = 20.dp
+    val PaddingBoxes = 6.dp
     val ColumnGap = 16.dp
     val CardCorner = 24.dp
     val BadgeCorner = 8.dp
