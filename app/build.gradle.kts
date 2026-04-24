@@ -63,6 +63,9 @@ dependencies {
     // Tesseract OCR
     implementation("com.rmtheis:tess-two:9.1.0")
 
+    //Security Crypto
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // Libraries from Version Catalog
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

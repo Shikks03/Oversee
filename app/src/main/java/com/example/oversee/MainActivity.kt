@@ -168,7 +168,7 @@ fun AppRouter() {
             )
         }
 
-        // 4. ROLE SELECTION ROUTE (Real Firebase Logic Added)
+        // 4. ROLE SELECTION ROUTE
         composable(
             route = "role_selection",
             enterTransition = {
@@ -180,14 +180,30 @@ fun AppRouter() {
                 } else null
             }
         ) {
+            // --- NEW: STATE FOR THE TRANSFER DIALOG ---
+            var showTransferDialog by remember { mutableStateOf(false) }
+            var pendingNewFid by remember { mutableStateOf<String?>(null) }
+            var existingOldFid by remember { mutableStateOf<String?>(null) }
+
             RoleSelectionScreen(
                 user = userName,
                 onSelectChild = {
                     val uid = AuthRepository.getUserId() ?: return@RoleSelectionScreen
-                    DeviceRepository.getFid { fid ->
-                        if (fid != null) {
-                            DeviceRepository.setRoleForThisDevice(context, uid, fid, "CHILD") { success ->
-                                if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
+                    DeviceRepository.getFid { newFid ->
+                        if (newFid != null) {
+                            // 1. Check if the parent already has a child linked
+                            FirebaseUserManager.fetchDeviceFidPointers(uid) { _, existingChildFid ->
+                                if (existingChildFid != null && existingChildFid != newFid) {
+                                    // 2. An old device exists! Trigger the pop-up.
+                                    existingOldFid = existingChildFid
+                                    pendingNewFid = newFid
+                                    showTransferDialog = true
+                                } else {
+                                    // 3. No old device exists. Just link it normally.
+                                    DeviceRepository.setRoleForThisDevice(context, uid, newFid, "CHILD") { success ->
+                                        if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
+                                    }
+                                }
                             }
                         }
                     }
@@ -203,6 +219,32 @@ fun AppRouter() {
                     }
                 }
             )
+
+            // --- NEW: THE TRANSFER CONFIRMATION POP-UP ---
+            if (showTransferDialog) {
+                // Re-using your excellent OverSeeDialog component!
+                com.example.oversee.ui.components.dialogs.OverSeeDialog(
+                    title = "Device Already Linked",
+                    description = "This account already has an existing child device linked. Do you want to transfer data and link this device instead?\n\n(Old logs will be securely deleted).",
+                    confirmText = "Transfer & Link",
+                    dismissText = "Cancel",
+                    isDestructive = false,
+                    onConfirm = {
+                        showTransferDialog = false
+                        val uid = AuthRepository.getUserId()
+                        if (uid != null && pendingNewFid != null && existingOldFid != null) {
+                            // 1. Wipe the old Ghost Data to save server costs
+                            com.example.oversee.data.remote.FirebaseIncidentManager.deleteOldChildData(existingOldFid!!)
+
+                            // 2. Link this new device
+                            DeviceRepository.setRoleForThisDevice(context, uid, pendingNewFid!!, "CHILD") { success ->
+                                if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
+                            }
+                        }
+                    },
+                    onDismiss = { showTransferDialog = false }
+                )
+            }
         }
 
         // 5. PARENT DASHBOARD ROUTE (Real Firebase Logic Added)

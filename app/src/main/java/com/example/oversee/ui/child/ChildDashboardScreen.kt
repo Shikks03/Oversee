@@ -514,3 +514,22 @@ fun ChildDashboardScreenPreviewError() {
         )
     }
 }
+
+@Preview(showBackground = true, name = "1. Transfer Dialog Pop-up", widthDp = 360, heightDp = 640)
+@Composable
+fun PreviewTransferDialog() {
+    MaterialTheme {
+        // We render an empty box as the background to simulate the screen
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f))) {
+            com.example.oversee.ui.components.dialogs.OverSeeDialog(
+                title = "Device Already Linked",
+                description = "This account already has an existing child device linked. Do you want to transfer data and link this device instead?\n\n(Old logs will be securely deleted).",
+                confirmText = "Transfer & Link",
+                dismissText = "Cancel",
+                isDestructive = false, // Set to true if you want the button to be red
+                onConfirm = {},
+                onDismiss = {}
+            )
+        }
+    }
+}

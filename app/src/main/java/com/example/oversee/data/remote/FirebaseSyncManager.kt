@@ -54,45 +54,41 @@ object FirebaseSyncManager {
 
     // --- PRIVATE HELPERS ---
 
+
     private fun uploadBatch(context: Context, logs: List<LogEntry>, fid: String, onDone: ((uploaded: Int, error: String?) -> Unit)? = null) {
         KeyManager.getOrCreateKey(context, fid) { key ->
             val db = FirebaseFirestore.getInstance()
-
             val userDocRef = db.collection(COLLECTION_SESSIONS).document(fid)
             val batch = db.batch()
 
-            // Create a new document in the "logs" sub-collection for each incident
             for (log in logs) {
                 val newDocRef = userDocRef.collection(SUBCOL_LOGS).document()
-
                 val dataMap = hashMapOf(
-                    "word" to CryptoManager.encryptString(log.word, key),
+                    "rawWord" to CryptoManager.encryptString(log.rawWord, key),
+                    "matchedWord" to CryptoManager.encryptString(log.matchedWord, key),
                     "severity" to CryptoManager.encryptString(log.severity, key),
                     "app" to CryptoManager.encryptString(log.app, key),
-                    "timestamp" to log.timestamp,  // Left unencrypted for Firestore ordering
+                    "timestamp" to log.timestamp,
                     "encrypted" to true
                 )
-
                 batch.set(newDocRef, dataMap)
             }
-
             batch.commit()
                 .addOnSuccessListener {
                     Log.d(TAG, "✅ Cloud Sync Complete!")
                     saveLastSyncTime(context, System.currentTimeMillis())
                     onDone?.invoke(logs.size, null)
                 }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "❌ Cloud Sync Failed", e)
-                    onDone?.invoke(0, e.message ?: "Upload failed")
-                }
+                .addOnFailureListener { e -> onDone?.invoke(0, e.message) }
         }
     }
+
 
     // --- FILE PARSING ---
 
     data class LogEntry(
-        val word: String,
+        val rawWord: String,
+        val matchedWord: String,
         val severity: String,
         val app: String,
         val timestamp: Long
@@ -103,26 +99,32 @@ object FirebaseSyncManager {
         val file = File(context.filesDir, "incidents_log.json")
         if (!file.exists()) return entries
 
+        val key = KeyManager.loadLocalKey(context)
+
         try {
             file.readLines().forEach { line ->
                 val trimmed = line.trim().removeSuffix(",")
                 if (trimmed.isNotEmpty()) {
                     try {
-                        val obj = JSONObject(trimmed)
+                        val jsonString = if (key != null && !trimmed.startsWith("{")) {
+                            CryptoManager.decryptString(trimmed, key)
+                        } else {
+                            trimmed
+                        }
+
+                        val obj = JSONObject(jsonString)
+                        // Fallback logic uses "word" if "rawWord" doesn't exist (for old logs)
                         entries.add(LogEntry(
-                            word = obj.getString("word"),
+                            rawWord = obj.optString("rawWord", obj.optString("word")),
+                            matchedWord = obj.optString("matchedWord", obj.optString("word")),
                             severity = obj.getString("severity"),
                             app = obj.getString("app"),
                             timestamp = obj.optLong("timestamp", 0L)
                         ))
-                    } catch (e: Exception) {
-                        // Skip corrupted lines
-                    }
+                    } catch (e: Exception) { /* Skip corrupted */ }
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error parsing local logs", e)
-        }
+        } catch (e: Exception) { Log.e(TAG, "Error parsing", e) }
         return entries
     }
 

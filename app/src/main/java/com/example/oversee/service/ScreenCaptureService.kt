@@ -247,7 +247,12 @@ class ScreenCaptureService : Service() {
                             val severity = mapSeverity(scored.severity)
                             IncidentRepository.saveIncident(
                                 applicationContext,
-                                Incident(scored.matchedWord, severity, "Facebook")
+                                Incident(
+                                    rawWord = scored.rawToken,
+                                    matchedWord = scored.matchedWord,
+                                    severity = severity, // Use mapSeverity(scored.severity) for the A/B test block
+                                    appName = "Facebook"
+                                )
                             )
                             sendConsoleUpdate("FLAG: '${scored.matchedWord}' ($severity, score=${scored.toxicityScore}) detected in ${duration}ms")
                             Log.d(TAG, "FLAG: '${scored.matchedWord}' ($severity, score=${scored.toxicityScore}) detected in ${duration}ms")
@@ -316,7 +321,12 @@ class ScreenCaptureService : Service() {
                     debounceMap[scored.matchedWord] = now
                     IncidentRepository.saveIncident(
                         applicationContext,
-                        Incident(scored.matchedWord, mapSeverity(scored.severity), "Facebook")
+                        Incident(
+                            rawWord = scored.rawToken,
+                            matchedWord = scored.matchedWord,
+                            severity = mapSeverity(scored.severity),
+                            appName = "Facebook"
+                        )
                     )
                 }
             }

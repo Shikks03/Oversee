@@ -47,7 +47,7 @@ fun LogTable(incidents: List<FirebaseSyncManager.LogEntry>) {
 private fun TableHeader() {
     Row(modifier = Modifier.fillMaxWidth().background(Color(0xFFF8F9FA)).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(AppTheme.ColumnGap), verticalAlignment = Alignment.CenterVertically) {
         Text("Severity", Modifier.weight(0.8f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-        Text("Word", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text("Detected / Matched", Modifier.weight(1.2f), fontSize = 10.sp, fontWeight = FontWeight.Bold) // Updated header
         Text("App", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
         Text("Time", Modifier.weight(0.7f), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End)
     }
@@ -62,15 +62,18 @@ fun LogItem(
     val timeString = remember(incident.timestamp) { timeFormat.format(Date(incident.timestamp)) }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(12.dp),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(AppTheme.ColumnGap),
         verticalAlignment = Alignment.CenterVertically
     ) {
         SeverityBadge(severity = incident.severity, modifier = Modifier.weight(0.8f))
-        Text(text = incident.word, modifier = Modifier.weight(1.2f), fontSize = 12.sp, maxLines = 1)
+
+        // Stacked Words
+        Column(modifier = Modifier.weight(1.2f)) {
+            Text(text = incident.rawWord, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = Color.Black)
+            Text(text = "as: ${incident.matchedWord}", fontSize = 10.sp, color = Color.Gray, maxLines = 1)
+        }
+
         Text(text = incident.app, modifier = Modifier.weight(1f), fontSize = 12.sp, color = Color.Gray)
         Text(text = timeString, modifier = Modifier.weight(0.8f), fontSize = 12.sp, textAlign = TextAlign.End)
     }

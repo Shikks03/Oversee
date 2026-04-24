@@ -30,18 +30,16 @@ object LocalStorageManager {
 
     // --- PUBLIC API ---
 
-    fun logIncident(context: Context, word: String, severity: String, appName: String) {
+    fun logIncident(context: Context, rawWord: String, matchedWord: String, severity: String, appName: String) {
         val currentTime = System.currentTimeMillis()
 
-        // 1. Cooldown Check
-        if (shouldSkipLog(word, currentTime)) {
-            Log.d(TAG, "⏳ DEBOUNCED: '$word' (Seen recently)")
+        // Debounce using the matched word so variations don't bypass the cooldown
+        if (shouldSkipLog(matchedWord, currentTime)) {
             return
         }
-
-        // 2. Persist Data
-        saveToFile(context, word, severity, appName, currentTime)
+        saveToFile(context, rawWord, matchedWord, severity, appName, currentTime)
     }
+
 
     /**
      * Reads the raw JSON log file.
@@ -69,28 +67,30 @@ object LocalStorageManager {
         return timeDiff < COOLDOWN_MS
     }
 
-    private fun saveToFile(context: Context, word: String, severity: String, app: String, time: Long) {
+    private fun saveToFile(context: Context, rawWord: String, matchedWord: String, severity: String, app: String, time: Long) {
         try {
             val jsonObject = JSONObject().apply {
-                put("word", word)
+                put("rawWord", rawWord)
+                put("matchedWord", matchedWord)
                 put("severity", severity)
                 put("app", app)
                 put("timestamp", time)
                 put("readable_time", formatTime(time))
             }
 
-            // Append newline for "Line-Delimited JSON" format
-            val entry = "$jsonObject,\n"
+            val rawJsonString = jsonObject.toString()
+            val key = KeyManager.loadLocalKey(context)
 
-            context.openFileOutput(FILE_NAME, Context.MODE_APPEND).use { stream ->
-                stream.write(entry.toByteArray())
+            val entryToSave = if (key != null) {
+                CryptoManager.encryptString(rawJsonString, key) + "\n"
+            } else {
+                rawJsonString + "\n"
             }
 
-            Log.d(TAG, "✅ SAVED: $entry")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to write to internal storage", e)
-        }
+            context.openFileOutput(FILE_NAME, Context.MODE_APPEND).use { stream ->
+                stream.write(entryToSave.toByteArray())
+            }
+        } catch (e: Exception) { Log.e(TAG, "Failed to write", e) }
     }
 
     private fun formatTime(time: Long): String {

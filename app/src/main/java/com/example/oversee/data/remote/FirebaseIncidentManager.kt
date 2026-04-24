@@ -32,25 +32,28 @@ object FirebaseIncidentManager {
                         try {
                             val isEncrypted = doc.getBoolean("encrypted") ?: false
                             if (isEncrypted) {
+                                // Fallback for old logs that only used "word"
+                                val rawEncrypted = doc.getString("rawWord") ?: doc.getString("word") ?: ""
+                                val matchedEncrypted = doc.getString("matchedWord") ?: doc.getString("word") ?: ""
+
                                 FirebaseSyncManager.LogEntry(
-                                    word = CryptoManager.decryptString(doc.getString("word") ?: "", key),
+                                    rawWord = CryptoManager.decryptString(rawEncrypted, key),
+                                    matchedWord = CryptoManager.decryptString(matchedEncrypted, key),
                                     severity = CryptoManager.decryptString(doc.getString("severity") ?: "", key),
                                     app = CryptoManager.decryptString(doc.getString("app") ?: "", key),
                                     timestamp = doc.getLong("timestamp") ?: 0L
                                 )
                             } else {
-                                // Legacy unencrypted document — read as plaintext
+                                val legacyWord = doc.getString("word") ?: "?"
                                 FirebaseSyncManager.LogEntry(
-                                    word = doc.getString("word") ?: "?",
+                                    rawWord = doc.getString("rawWord") ?: legacyWord,
+                                    matchedWord = doc.getString("matchedWord") ?: legacyWord,
                                     severity = doc.getString("severity") ?: "LOW",
                                     app = doc.getString("app") ?: "Unknown",
                                     timestamp = doc.getLong("timestamp") ?: 0L
                                 )
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to read document ${doc.id}", e)
-                            null
-                        }
+                        } catch (e: Exception) { null }
                     }
                     Log.d(TAG, "DIAG L4: decrypted ${list.size} of ${documents.size()} documents")
                     onResult(list, null)
@@ -60,5 +63,28 @@ object FirebaseIncidentManager {
                 Log.e(TAG, "DIAG L3: Firestore query FAILED for fid=$childFid: ${e.message}", e)
                 onResult(null, e.message)
             }
+    }
+
+    /**
+     * Deletes the old child's encrypted logs and encryption key from the database
+     * to prevent "Ghost Data" and save server storage.
+     */
+    fun deleteOldChildData(oldFid: String) {
+        val oldSessionRef = db.collection("monitor_sessions").document(oldFid)
+
+        // Find all the old logs and delete them in a batch
+        oldSessionRef.collection("logs").get().addOnSuccessListener { snapshot ->
+            val batch = db.batch()
+            for (doc in snapshot.documents) {
+                batch.delete(doc.reference)
+            }
+            batch.commit().addOnSuccessListener {
+                // Once the logs are gone, delete the master document containing the encryption key
+                oldSessionRef.delete()
+                Log.d(TAG, "Successfully wiped old child data for FID: $oldFid")
+            }
+        }.addOnFailureListener { e ->
+            Log.e(TAG, "Failed to delete old child data", e)
+        }
     }
 }

@@ -137,7 +137,7 @@ fun DashboardOverviewScreen(
                 SummaryCard(modifier = Modifier.weight(1f), title = "Total Reports", value = filteredIncidents.size.toString(), icon = Icons.Default.NotificationsActive, onClick = onNavigateToLogs)
             }
 
-            val topWords = remember(filteredIncidents) { filteredIncidents.groupingBy { it.word }.eachCount().entries.sortedByDescending { it.value }.take(3) }
+            val topWords = remember(filteredIncidents) { filteredIncidents.groupingBy { it.matchedWord }.eachCount().entries.sortedByDescending { it.value }.take(3) }
             if (topWords.isNotEmpty()) {
                 Text("Top Flagged Words", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
                 Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AppTheme.Surface), border = BorderStroke(1.dp, AppTheme.Border)) {

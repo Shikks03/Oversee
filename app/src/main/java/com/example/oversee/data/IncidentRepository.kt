@@ -14,9 +14,8 @@ object IncidentRepository {
 
     // Save logic for Child device
     fun saveIncident(context: Context, incident: Incident) {
-        LocalStorageManager.logIncident(context, incident.word, incident.severity, incident.appName)
+        LocalStorageManager.logIncident(context, incident.rawWord, incident.matchedWord, incident.severity, incident.appName)
 
-        // Critical alerts sync immediately and notify parent
         if (incident.severity == "HIGH") {
             FirebaseSyncManager.syncPendingLogs(context)
             FcmAlertManager.sendHighSeverityAlert(context)

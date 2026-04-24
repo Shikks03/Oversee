@@ -97,7 +97,7 @@ fun NotificationItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text("High Severity Alert", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AppTheme.Error)
                 Spacer(Modifier.height(4.dp))
-                Text("Flagged content '${incident.word}' detected on ${incident.app}.", fontSize = 13.sp, color = Color.DarkGray, lineHeight = 18.sp)
+                Text("Flagged content '${incident.rawWord}' detected on ${incident.app}.", fontSize = 13.sp, color = Color.DarkGray, lineHeight = 18.sp)
                 Spacer(Modifier.height(8.dp))
                 Text(timeString, fontSize = 11.sp, color = Color.Gray)
             }
