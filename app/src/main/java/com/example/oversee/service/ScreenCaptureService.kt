@@ -31,6 +31,10 @@ import androidx.lifecycle.*
 import androidx.savedstate.*
 import androidx.core.graphics.scale
 
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+
 // --- PROJECT IMPORTS ---
 import com.example.oversee.data.IncidentRepository
 import com.example.oversee.data.local.AppPreferenceManager
@@ -62,8 +66,10 @@ class ScreenCaptureService : Service() {
     private val attemptCount = AtomicInteger(0)
     private val successCaptureCount = AtomicInteger(0)
     private val ocrFinishedCount = AtomicInteger(0)
-    private var tess: TessBaseAPI? = null
-    private var tessBaseline: TessBaseAPI? = null
+//    private var tess: TessBaseAPI? = null
+//    private var tessBaseline: TessBaseAPI? = null
+
+    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private lateinit var textAnalysisEngine: TextAnalysisEngine
 
     private val debounceMap = ConcurrentHashMap<String, Long>()
@@ -76,8 +82,6 @@ class ScreenCaptureService : Service() {
     // Step 10: last pHash for frame-diff gate
     @Volatile private var lastHash: Long? = null
 
-    // Step 8: one-slot bitmap pool for the ALPHA_8 source bitmap
-    @Volatile private var reusableBitmap: Bitmap? = null
 
     private lateinit var windowManager: WindowManager
     private var overlayView: ComposeView? = null
@@ -86,21 +90,7 @@ class ScreenCaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        prepareTesseract()
         textAnalysisEngine = TextAnalysisEngine.fromAssets(this)
-        tess = TessBaseAPI().apply {
-            init(filesDir.absolutePath, "eng")
-            // Step 1 (A7): DPI hint so Tesseract skips internal scale inference
-            setVariable("user_defined_dpi", resources.displayMetrics.densityDpi.toString())
-            // Step 2 (B3): PSM_SPARSE_TEXT matches Facebook's scattered-card layout
-            pageSegMode = TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT
-            // Step 3 (C2): conservative whitelist — keeps digits for leet normalisation,
-            // drops emoji / private-use Unicode that bloats the token set
-            setVariable(
-                "tessedit_char_whitelist",
-                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?'\""
-            )
-        }
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -138,17 +128,17 @@ class ScreenCaptureService : Service() {
         return START_STICKY
     }
 
-    private fun prepareTesseract() {
-        val tessDir = File(filesDir, "tessdata")
-        if (!tessDir.exists()) tessDir.mkdirs()
-        val jsonData = File(tessDir, "eng.traineddata")
-        if (!jsonData.exists()) {
-            assets.open("tessdata/eng.traineddata").use { input ->
-                jsonData.outputStream().use { output -> input.copyTo(output) }
-                Log.d("OCR", "prepareTesseract DONE")
-            }
-        }
-    }
+//    private fun prepareTesseract() {
+//        val tessDir = File(filesDir, "tessdata")
+//        if (!tessDir.exists()) tessDir.mkdirs()
+//        val jsonData = File(tessDir, "eng.traineddata")
+//        if (!jsonData.exists()) {
+//            assets.open("tessdata/eng.traineddata").use { input ->
+//                jsonData.outputStream().use { output -> input.copyTo(output) }
+//                Log.d("OCR", "prepareTesseract DONE")
+//            }
+//        }
+//    }
 
     // --- CAPTURE LOOP ---
     private val captureRunnable = object : Runnable {
@@ -167,8 +157,6 @@ class ScreenCaptureService : Service() {
                     image.close()
                     ocrExecutor.execute {
                         runOcr(bitmap, currentId)
-                        // Step 8: return to pool instead of recycling
-                        reusableBitmap = bitmap
                     }
                 }
             } else {
@@ -181,158 +169,109 @@ class ScreenCaptureService : Service() {
 
     // --- OCR LOGIC ---
     private fun runOcr(bitmap: Bitmap, id: Int) {
-        // Step 5: skip OCR while keyboard is up — user is typing, not reading feed
-        if (ScreenState.isKeyboardVisible) return
+        if (ScreenState.isKeyboardVisible) {
+            bitmap.recycle()
+            return
+        }
 
-        val api = tess ?: return
-        try {
-            val startTime = System.currentTimeMillis()
-            val debugMode = AppPreferenceManager.getBoolean(applicationContext, "ocr_debug", false)
+        val startTime = System.currentTimeMillis()
 
-            // Step 6 (A1): crop status-bar and nav-bar strips
-            val cropped = if (topInset + bottomInset > 0) {
-                val cropHeight = bitmap.height - topInset - bottomInset
-                if (cropHeight > 0)
-                    Bitmap.createBitmap(bitmap, 0, topInset, bitmap.width, cropHeight)
-                else bitmap
-            } else bitmap
+        val cropped = if (topInset + bottomInset > 0) {
+            val cropHeight = bitmap.height - topInset - bottomInset
+            if (cropHeight > 0)
+                Bitmap.createBitmap(bitmap, 0, topInset, bitmap.width, cropHeight)
+            else bitmap
+        } else bitmap
 
-            // Step 4 (A4+A5): bilinear scale only on high-res displays
-            val scaled = if (cropped.width >= 1080)
-                cropped.scale(cropped.width / 2, cropped.height / 2, true)
-            else cropped
-
-            if (debugMode) {
-                runAbTest(bitmap, scaled, api, id, startTime)
-                if (scaled !== cropped) scaled.recycle()
-                if (cropped !== bitmap) cropped.recycle()
-                return
-            }
-
-            // Step 10 (A2): pHash frame-diff gate — skip if frame looks identical
-            val hash = OcrPreprocessor.perceptualHash(scaled)
-            if (lastHash != null && java.lang.Long.bitCount(hash xor lastHash!!) < 5) {
-                if (scaled !== cropped) scaled.recycle()
-                if (cropped !== bitmap) cropped.recycle()
-                Log.d(TAG, "pHash gate: duplicate frame #$id skipped")
-                return
-            }
-            lastHash = hash
-
-            // Step 9 (B1): Otsu binarisation (skipped automatically on photo-backed posts)
-            val processed = OcrPreprocessor.applyOtsu(scaled)
-
-            // Feed grayscale bytes directly — 1 byte/pixel, 1/4 the RGBA upload size
-            val bytes = OcrPreprocessor.extractBytes(processed)
-            api.setImage(bytes, processed.width, processed.height, 1, processed.width)
-            val text = api.utF8Text
-
-            if (processed !== scaled) processed.recycle()
-            if (scaled !== cropped) scaled.recycle()
+        // --- NEW: FRAME SKIPPING LOGIC ---
+        val currentHash = generateFastHash(cropped)
+        if (lastHash != null && java.lang.Long.bitCount(currentHash xor lastHash!!) < 5) {
+            Log.d(TAG, "Frame #$id skipped (Identical to previous screen)")
             if (cropped !== bitmap) cropped.recycle()
+            bitmap.recycle()
+            return
+        }
+        lastHash = currentHash
+        // ---------------------------------
 
-            val duration = System.currentTimeMillis() - startTime
-            Log.d(TAG, "OCR #$id (${duration}ms)")
+        val image = InputImage.fromBitmap(cropped, 0)
 
-            if (!text.isNullOrBlank()) {
-                val analysisResult = textAnalysisEngine.analyze(text)
-                val scoredWords = ToxicityScorer.score(analysisResult)
-                Log.d(TAG, "OCR Text: $text")
-                if (scoredWords.isNotEmpty()) {
-                    scoredWords.forEach { scored ->
-                        val lastSeen = debounceMap[scored.matchedWord] ?: 0L
-                        val now = System.currentTimeMillis()
-                        if (now - lastSeen > DEBOUNCE_TIME_MS) {
-                            debounceMap[scored.matchedWord] = now
-                            val severity = mapSeverity(scored.severity)
-                            IncidentRepository.saveIncident(
-                                applicationContext,
-                                Incident(
-                                    rawWord = scored.rawToken,
-                                    matchedWord = scored.matchedWord,
-                                    severity = severity, // Use mapSeverity(scored.severity) for the A/B test block
-                                    appName = "Facebook"
+        textRecognizer.process(image)
+            .addOnSuccessListener { visionText ->
+                val duration = System.currentTimeMillis() - startTime
+                Log.d(TAG, "ML Kit OCR #$id (${duration}ms) - Text:\n${visionText.text}")
+
+                if (visionText.text.isNotBlank()) {
+                    val analysisResult = textAnalysisEngine.analyze(visionText.text)
+                    val scoredWords = ToxicityScorer.score(analysisResult)
+
+                    if (scoredWords.isNotEmpty()) {
+                        scoredWords.forEach { scored ->
+                            val lastSeen = debounceMap[scored.matchedWord] ?: 0L
+                            val now = System.currentTimeMillis()
+
+                            if (now - lastSeen > DEBOUNCE_TIME_MS) {
+                                debounceMap[scored.matchedWord] = now
+                                val severity = mapSeverity(scored.severity)
+
+                                // --- NEW: RESTORED LOGCAT PRINT ---
+                                Log.d(TAG, "🚨 FLAG CAUGHT: OCR Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
+
+
+                                IncidentRepository.saveIncident(
+                                    applicationContext,
+                                    Incident(
+                                        rawWord = scored.originalText,
+                                        matchedWord = scored.matchedWord,
+                                        severity = severity,
+                                        appName = "Facebook"
+                                    )
                                 )
-                            )
-                            sendConsoleUpdate("FLAG: '${scored.matchedWord}' ($severity, score=${scored.toxicityScore}) detected in ${duration}ms")
-                            Log.d(TAG, "FLAG: '${scored.matchedWord}' ($severity, score=${scored.toxicityScore}) detected in ${duration}ms")
-                        } else {
-                            Log.d(TAG, "Debounced ${scored.matchedWord}")
+                                sendConsoleUpdate("FLAG: '${scored.rawToken}' -> '${scored.matchedWord}' ($severity) in ${duration}ms")
+                            } else {
+                                Log.d(TAG, "⏳ Ignoring '${scored.matchedWord}' (Debounce active)")
+                            }
                         }
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "OCR Processing Error", e)
-            sendConsoleUpdate("Error: OCR Failed - ${e.message}")
-        }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "ML Kit Processing Error", e)
+            }
+            .addOnCompleteListener {
+                if (cropped !== bitmap) cropped.recycle()
+                bitmap.recycle()
+            }
     }
 
-    // A/B harness: runs baseline (no crop, no Otsu, default Tesseract) and candidate
-    // (full pipeline) on the same ALPHA_8 source; logs token diff to ocr_ab.log.
-    // Only baseline's incident saves persist — candidate output is metric-only.
-    private fun runAbTest(sourceBitmap: Bitmap, candidateScaled: Bitmap, api: TessBaseAPI, id: Int, startTime: Long) {
-        try {
-            val bl = tessBaseline ?: TessBaseAPI().apply {
-                init(filesDir.absolutePath, "eng")
-            }.also { tessBaseline = it }
+    private fun generateFastHash(bitmap: Bitmap): Long {
+        // Shrink the image to 8x8 pixels to instantly blur out minor video noise
+        val scaled = Bitmap.createScaledBitmap(bitmap, 8, 8, true)
+        val pixels = IntArray(64)
+        scaled.getPixels(pixels, 0, 8, 0, 0, 8, 8)
 
-            // Pipeline A: nearest-neighbor 50% scale, no Otsu, default Tesseract config
-            val scaledA = sourceBitmap.scale(sourceBitmap.width / 2, sourceBitmap.height / 2, false)
-            val bytesA = OcrPreprocessor.extractBytes(scaledA)
-            val timeAStart = System.nanoTime()
-            bl.setImage(bytesA, scaledA.width, scaledA.height, 1, scaledA.width)
-            val textA = bl.utF8Text ?: ""
-            val latA = System.nanoTime() - timeAStart
-            scaledA.recycle()
+        var sum = 0
+        val grays = IntArray(64)
+        for (i in 0..63) {
+            val p = pixels[i]
 
-            // Pipeline B: Otsu on already-cropped+scaled bitmap, optimised Tesseract config
-            val processedB = OcrPreprocessor.applyOtsu(candidateScaled)
-            val bytesB = OcrPreprocessor.extractBytes(processedB)
-            val timeBStart = System.nanoTime()
-            api.setImage(bytesB, processedB.width, processedB.height, 1, processedB.width)
-            val textB = api.utF8Text ?: ""
-            val latB = System.nanoTime() - timeBStart
-            if (processedB !== candidateScaled) processedB.recycle()
+            // Extract RGB directly from the Int to avoid Color import clashes
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
 
-            // Token-set diff (ground-truth metric: matched flagged words)
-            val tA = textA.split(Regex("\\s+")).filter { it.length > 2 }.toSet()
-            val tB = textB.split(Regex("\\s+")).filter { it.length > 2 }.toSet()
-            val onlyA = (tA - tB).take(3)
-            val onlyB = (tB - tA).take(3)
-            val matchedA = textAnalysisEngine.analyze(textA).detectedWords.size
-            val matchedB = textAnalysisEngine.analyze(textB).detectedWords.size
-
-            val entry = """{"ts":${System.currentTimeMillis()},"frame":$id,"latA_ns":$latA,"latB_ns":$latB,"onlyA":$onlyA,"onlyB":$onlyB,"matchedA":$matchedA,"matchedB":$matchedB}"""
-            try {
-                FileWriter(File(filesDir, "ocr_ab.log"), true).use { it.appendLine(entry) }
-            } catch (e: Exception) {
-                Log.w(TAG, "A/B log write failed: ${e.message}")
-            }
-            Log.d(TAG, "A/B #$id: latA=${latA / 1_000_000}ms latB=${latB / 1_000_000}ms onlyA=$onlyA onlyB=$onlyB")
-            sendConsoleUpdate("A/B #$id: baseline=${latA / 1_000_000}ms candidate=${latB / 1_000_000}ms matched A=$matchedA B=$matchedB")
-
-            // Only baseline's incidents are saved
-            val scoredWords = ToxicityScorer.score(textAnalysisEngine.analyze(textA))
-            scoredWords.forEach { scored ->
-                val lastSeen = debounceMap[scored.matchedWord] ?: 0L
-                val now = System.currentTimeMillis()
-                if (now - lastSeen > DEBOUNCE_TIME_MS) {
-                    debounceMap[scored.matchedWord] = now
-                    IncidentRepository.saveIncident(
-                        applicationContext,
-                        Incident(
-                            rawWord = scored.rawToken,
-                            matchedWord = scored.matchedWord,
-                            severity = mapSeverity(scored.severity),
-                            appName = "Facebook"
-                        )
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "A/B test error", e)
+            // Calculate brightness
+            val gray = (r + g + b) / 3
+            grays[i] = gray
+            sum += gray
         }
+        val mean = sum / 64
+        var hash = 0L
+        for (i in 0..63) {
+            if (grays[i] >= mean) hash = hash or (1L shl i)
+        }
+        scaled.recycle()
+        return hash
     }
 
     // --- COMPOSE OVERLAY ---
@@ -384,35 +323,36 @@ class ScreenCaptureService : Service() {
         }
     }
 
-    // Step 7 (A3) + Step 8 (A6): direct-luminance grayscale → ALPHA_8 + bitmap pooling.
-    // Avoids Canvas/ColorMatrix overhead and halves GC churn on repeated captures.
     private fun imageToBitmap(image: Image): Bitmap {
-        val plane = image.planes[0]
-        val buf = plane.buffer
-        val pixelStride = plane.pixelStride
-        val rowStride = plane.rowStride
-        val w = image.width
-        val h = image.height
-        val out = ByteArray(w * h)
-        var di = 0
-        for (y in 0 until h) {
-            var si = y * rowStride
-            for (x in 0 until w) {
-                val r = buf[si].toInt() and 0xFF
-                val g = buf[si + 1].toInt() and 0xFF
-                val b = buf[si + 2].toInt() and 0xFF
-                out[di++] = ((r * 77 + g * 150 + b * 29) ushr 8).toByte()
-                si += pixelStride
-            }
-        }
-        val existing = reusableBitmap
-        val bitmap = if (existing != null && !existing.isRecycled && existing.width == w && existing.height == h) {
-            existing
+        val planes = image.planes
+        val buffer = planes[0].buffer
+        val pixelStride = planes[0].pixelStride
+        val rowStride = planes[0].rowStride
+        val width = image.width
+        val height = image.height
+
+        // Hardware screens often add invisible "padding" bytes to the edge of rows.
+        // We have to account for that padding so the image doesn't look skewed.
+        val rowPadding = rowStride - pixelStride * width
+
+        // 1. Create a full-color ARGB_8888 bitmap
+        val bitmap = Bitmap.createBitmap(
+            width + rowPadding / pixelStride,
+            height,
+            Bitmap.Config.ARGB_8888
+        )
+
+        // 2. Copy the raw screen pixels directly into it
+        bitmap.copyPixelsFromBuffer(buffer)
+
+        // 3. Slice off the invisible padding on the right edge (if any)
+        return if (rowPadding > 0) {
+            val croppedBitmap = Bitmap.createBitmap(bitmap, 0, 0, width, height)
+            bitmap.recycle() // Free the uncropped version from memory
+            croppedBitmap
         } else {
-            Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)
+            bitmap
         }
-        bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(out))
-        return bitmap
     }
 
     private fun createNotification(): Notification {
@@ -431,9 +371,8 @@ class ScreenCaptureService : Service() {
         removeOverlay()
         CaptureState.isRunning = false
         if (::projection.isInitialized) projection.stop()
-        tess?.end()
-        tessBaseline?.end()
-        reusableBitmap?.recycle()
+
+
         ocrExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -451,7 +390,10 @@ class ScreenCaptureService : Service() {
         // Step 5: set by FacebookAccessibilityService on every window-list change
         @Volatile var isKeyboardVisible = false
     }
+
 }
+
+
 
 // --- COMPOSE UI ---
 @Composable

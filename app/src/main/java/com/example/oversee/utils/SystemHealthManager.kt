@@ -32,8 +32,19 @@ object SystemHealthManager {
             "Accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
             "Notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply { putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName) }
             "Overlay" -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
+            "Capture" -> Intent(context, com.example.oversee.ui.child.CapturePermissionActivity::class.java).apply {
+                // Required when starting an Activity from outside a standard Activity context
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            "Internet" -> Intent(Settings.ACTION_WIRELESS_SETTINGS)
             else -> null
         }
-        intent?.let { context.startActivity(it) }
+
+        if (intent != null) {
+            context.startActivity(intent)
+        } else if (label == "Firebase") {
+            // Firebase is an internal app state, not an Android system setting.
+            android.widget.Toast.makeText(context, "Checking Firebase connection...", android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 }
