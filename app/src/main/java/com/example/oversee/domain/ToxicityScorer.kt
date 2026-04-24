@@ -10,6 +10,7 @@ object ToxicityScorer {
     private const val FREQUENCY_THRESHOLD = 2   // word must appear MORE than this many times
 
     data class ScoredWord(
+        val originalText: String, // <--- ADD THIS (e.g., "T@ng1n@")
         val rawToken: String,
         val matchedWord: String,
         val toxicityScore: Int,          // 1..6
@@ -54,6 +55,7 @@ object ToxicityScorer {
             if (isPersonDirected) s++
 
             ScoredWord(
+                originalText      = dw.originalText,
                 rawToken          = dw.rawToken,
                 matchedWord       = dw.matchedWord,
                 toxicityScore     = s,

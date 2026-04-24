@@ -61,18 +61,38 @@ object FirebaseSyncManager {
             val userDocRef = db.collection(COLLECTION_SESSIONS).document(fid)
             val batch = db.batch()
 
-            for (log in logs) {
-                val newDocRef = userDocRef.collection(SUBCOL_LOGS).document()
-                val dataMap = hashMapOf(
-                    "rawWord" to CryptoManager.encryptString(log.rawWord, key),
-                    "matchedWord" to CryptoManager.encryptString(log.matchedWord, key),
-                    "severity" to CryptoManager.encryptString(log.severity, key),
-                    "app" to CryptoManager.encryptString(log.app, key),
-                    "timestamp" to log.timestamp,
-                    "encrypted" to true
+            // 1. Determine the current month (e.g., "2026_04") to use as the Bucket ID
+            val monthFormat = java.text.SimpleDateFormat("yyyy_MM", java.util.Locale.getDefault())
+
+            // Group the logs by month just in case a sync crosses midnight into a new month
+            val logsByMonth = logs.groupBy { monthFormat.format(java.util.Date(it.timestamp)) }
+
+            for ((monthStr, monthLogs) in logsByMonth) {
+                // Name the document after the month (e.g., bucket_2026_04)
+                val bucketRef = userDocRef.collection(SUBCOL_LOGS).document("bucket_$monthStr")
+
+                // 2. Format the logs into a Map that Firestore can save
+                val firestoreLogs = monthLogs.map { log ->
+                    hashMapOf(
+                        "rawWord" to CryptoManager.encryptString(log.rawWord, key),
+                        "matchedWord" to CryptoManager.encryptString(log.matchedWord, key),
+                        "severity" to CryptoManager.encryptString(log.severity, key),
+                        "app" to CryptoManager.encryptString(log.app, key),
+                        "timestamp" to log.timestamp,
+                        "encrypted" to true
+                    )
+                }
+
+                // 3. arrayUnion
+                // This appends all the new logs into a single array named "logsArray".
+                // SetOptions.merge() creates the bucket if it's the first day of the month!
+                batch.set(
+                    bucketRef,
+                    hashMapOf("logsArray" to com.google.firebase.firestore.FieldValue.arrayUnion(*firestoreLogs.toTypedArray())),
+                    com.google.firebase.firestore.SetOptions.merge()
                 )
-                batch.set(newDocRef, dataMap)
             }
+
             batch.commit()
                 .addOnSuccessListener {
                     Log.d(TAG, "✅ Cloud Sync Complete!")
