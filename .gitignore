@@ -29,3 +29,11 @@ copilot-instructions.md
 .codeium/
 .windsurf/
 .bolt/
+.worktrees/
+
+# Planning/AI docs
+docs/superpowers/
+
+# JVM crash dumps
+hs_err_pid*.log
+replay_pid*.log

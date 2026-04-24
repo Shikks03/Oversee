@@ -16,7 +16,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Prototype">
+        android:theme="@style/Theme.Oversee">
         <activity android:name=".ui.child.ChildDashboardActivity" android:exported="false" />
         <activity android:name=".ui.child.CapturePermissionActivity" />
         <activity
@@ -30,14 +30,14 @@
         <activity
             android:name=".ui.welcome.SignInActivity"
             android:exported="true"
-            android:theme="@style/Theme.Prototype">
+            android:theme="@style/Theme.Oversee">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <activity android:name=".ui.parent.ParentDashboardActivity" android:exported="false" />
+        <activity android:name=".ui.parent.ParentDashboardActivity" android:exported="true" />
 
         <service
             android:name=".service.ScreenCaptureService"
@@ -46,6 +46,14 @@
         <service
             android:name=".service.OverlayService"
             android:exported="false" />
+
+        <service
+            android:name=".service.OverseeMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".service.FacebookAccessibilityService"
