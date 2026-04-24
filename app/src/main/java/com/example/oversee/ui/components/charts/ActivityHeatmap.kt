@@ -34,7 +34,8 @@ fun ActivityHeatmap(dailyIncidents: List<FirebaseSyncManager.LogEntry>) {
     val maxCount = hourlyCounts.maxOrNull()?.coerceAtLeast(1) ?: 1
 
     Card(
-        modifier = Modifier.fillMaxWidth().height(160.dp),
+        // 2.2f creates a wide banner shape for the heatmap that scales
+        modifier = Modifier.fillMaxWidth().aspectRatio(2.2f),
         shape = RoundedCornerShape(AppTheme.CardCorner),
         colors = CardDefaults.cardColors(containerColor = AppTheme.Surface),
         border = BorderStroke(1.dp, AppTheme.Border)

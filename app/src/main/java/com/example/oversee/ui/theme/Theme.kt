@@ -10,13 +10,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Typography
 import androidx.compose.ui.unit.*
 
-
 /**
  * Global UI Constants: Central source of truth for the app's design system.
- * Replaces old XML values from colors.xml and activity layouts.
  */
 object AppTheme {
-    // Colors (Refined from original XML hex values)
+    // --- EXISTING PARENT/MAIN COLORS ---
     val Background = Color(0xFFEDF2F6) // Light Blue
     val SecBackground = Color(0xFF457cba) // Dark Blue
     val Surface = Color(0xFFFFFFFF)    // Pure White
@@ -30,7 +28,15 @@ object AppTheme {
     val TextPrimary =  Color(0xFF000000) // Black
     val TextTertiary =  Color(0xFFB3B3B3) // Grey
 
-    // Spacing & Sizing
+    // --- NEW: CHILD DASHBOARD COLORS ---
+    val ChildBackground = Color(0xFFF1F5F9)
+    val ChildAccent = Color(0xFF0F766E)
+    val ChildAccentLight = Color(0xFFCCFBF1)
+    val ChildTextSecondary = Color(0xFF64748B)
+    val ChildSuccess = Color(0xFF10B981)
+    val ChildError = Color(0xFFEF4444)
+
+    // --- SPACING & SIZING ---
     val PaddingDefault = 20.dp
     val PaddingBoxes = 6.dp
     val ColumnGap = 16.dp
@@ -52,7 +58,6 @@ object AppTheme {
     )
 }
 
-
 val AppTypography = Typography(
     displayLarge = AppTheme.TitlePageStyle,
     bodyLarge = TextStyle(fontSize = 16.sp)
@@ -63,45 +68,46 @@ val AppTypography = Typography(
  * current screen dimensions, so layouts adapt automatically to any phone or tablet.
  */
 object Responsive {
-    /** ~15 % of screen width — replaces the hard-coded 57 dp horizontal inset. */
     @Composable
     fun horizontalPadding(): Dp {
         val w = LocalConfiguration.current.screenWidthDp
         return (w * 0.15f).dp
     }
 
-    /** ~12 % of screen height — replaces the hard-coded 103 dp vertical padding. */
     @Composable
     fun verticalPadding(): Dp {
         val h = LocalConfiguration.current.screenHeightDp
         return (h * 0.12f).dp.coerceIn(48.dp, 120.dp)
     }
 
-    /** Logo icon on sign-in / sign-up screens (~35 % of width). */
     @Composable
     fun logoSize(): Dp {
         val w = LocalConfiguration.current.screenWidthDp
         return (w * 0.35f).dp.coerceIn(80.dp, 160.dp)
     }
 
-    /** Section icon on setup / role screens (~22 % of width). */
     @Composable
     fun setupIconSize(): Dp {
         val w = LocalConfiguration.current.screenWidthDp
         return (w * 0.22f).dp.coerceIn(60.dp, 96.dp)
     }
 
-    /** Vertical gap between content sections (~9 % of screen height). */
     @Composable
     fun sectionSpacing(): Dp {
         val h = LocalConfiguration.current.screenHeightDp
         return (h * 0.09f).dp.coerceIn(32.dp, 100.dp)
     }
-}
 
-//TEMP
-object UserRoles{
-    const val PARENT = "parent"
-    const val CHILD = "child"
-    const val UNSET = "NOT_SET"
+    @Composable
+    fun dashboardCircleSize(): Dp {
+        val w = LocalConfiguration.current.screenWidthDp
+        val h = LocalConfiguration.current.screenHeightDp
+        return (minOf(w, h) * 0.4f).dp.coerceIn(120.dp, 220.dp)
+    }
+
+    @Composable
+    fun dialogMaxHeight(): Dp {
+        val h = LocalConfiguration.current.screenHeightDp
+        return (h * 0.6f).dp
+    }
 }

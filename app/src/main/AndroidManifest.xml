@@ -2,11 +2,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -16,19 +19,11 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Oversee">
-        <activity android:name=".ui.child.ChildDashboardActivity" android:exported="false" />
-        <activity android:name=".ui.child.CapturePermissionActivity" />
-        <activity
-            android:name=".ui.welcome.RoleSelectionActivity"
-            android:exported="false" />
-        <activity
-            android:name=".ui.welcome.SignUpActivity"
-            android:exported="false" />
-
+        android:theme="@style/Theme.Oversee"
+        tools:targetApi="31">
 
         <activity
-            android:name=".ui.welcome.SignInActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.Oversee">
             <intent-filter>
@@ -37,38 +32,39 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".ui.parent.ParentDashboardActivity" android:exported="true" />
+        <activity
+            android:name=".ui.child.CapturePermissionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Oversee" />
+
+        <service
+            android:name=".service.FacebookAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config"/>
+        </service>
 
         <service
             android:name=".service.ScreenCaptureService"
-            android:foregroundServiceType="mediaProjection"
-            android:exported="false"/>
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
         <service
             android:name=".service.OverlayService"
             android:exported="false" />
 
         <service
             android:name=".service.OverseeMessagingService"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
 
-        <service
-            android:name=".service.FacebookAccessibilityService"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService"/>
-            </intent-filter>
-
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_config"/>
-        </service>
-
-
     </application>
-
 </manifest>

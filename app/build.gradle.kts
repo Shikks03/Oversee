@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.locationdelegation)
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.tooling.preview)
+    implementation(libs.androidx.navigation.compose)
 
 
     // Test Dependencies

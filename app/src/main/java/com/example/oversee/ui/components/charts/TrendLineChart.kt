@@ -66,7 +66,8 @@ fun TrendLineChart(
     val tooltipDateFormat = remember { SimpleDateFormat("MMM dd", Locale.getDefault()) }
 
     Card(
-        modifier = Modifier.fillMaxWidth().height(200.dp), // Slightly taller to fit tooltips
+        // 1.6f means the width will be 1.6x the height. It grows/shrinks perfectly.
+        modifier = Modifier.fillMaxWidth().aspectRatio(1.6f),
         colors = CardDefaults.cardColors(containerColor = AppTheme.Surface),
         shape = RoundedCornerShape(AppTheme.CardCorner),
         border = BorderStroke(1.dp, AppTheme.Border)

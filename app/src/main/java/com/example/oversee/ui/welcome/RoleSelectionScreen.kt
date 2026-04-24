@@ -88,7 +88,7 @@ fun RoleSelectionScreen(
                 modifier = Modifier.size(iconSize)
             )
             Spacer(modifier = Modifier.height(16.dp))
-            val displayName = if (user.isNotBlank()) user else "there"
+            val displayName = user.ifBlank { "there" }
             Text(
                 text = "Hello, $displayName!",
                 fontSize = 32.sp,

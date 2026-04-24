@@ -5,7 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Backspace
+import androidx.compose.material.icons.automirrored.rounded.Backspace
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -92,33 +92,37 @@ fun OverSeePinPad(
             for (row in keys) {
                 Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
                     for (key in row) {
-                        if (key == "") {
-                            Spacer(modifier = Modifier.size(76.dp))
-                        } else if (key == "DEL") {
-                            Box(
-                                modifier = Modifier
-                                    .size(76.dp)
-                                    .clip(CircleShape)
-                                    .clickable { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Rounded.Backspace, contentDescription = "Delete", tint = Color.DarkGray, modifier = Modifier.size(28.dp))
+                        when (key) {
+                            "" -> {
+                                Spacer(modifier = Modifier.size(76.dp))
                             }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(76.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.White)
-                                    .clickable {
-                                        if (pin.length < 4) {
-                                            pin += key
-                                            if (pin.length == 4) onPinComplete(pin)
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(key, fontSize = 32.sp, fontWeight = FontWeight.Medium, color = Color.Black)
+                            "DEL" -> {
+                                Box(
+                                    modifier = Modifier
+                                        .size(76.dp)
+                                        .clip(CircleShape)
+                                        .clickable { if (pin.isNotEmpty()) pin = pin.dropLast(1) },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Delete", tint = Color.DarkGray, modifier = Modifier.size(28.dp))
+                                }
+                            }
+                            else -> {
+                                Box(
+                                    modifier = Modifier
+                                        .size(76.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White)
+                                        .clickable {
+                                            if (pin.length < 4) {
+                                                pin += key
+                                                if (pin.length == 4) onPinComplete(pin)
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(key, fontSize = 32.sp, fontWeight = FontWeight.Medium, color = Color.Black)
+                                }
                             }
                         }
                     }

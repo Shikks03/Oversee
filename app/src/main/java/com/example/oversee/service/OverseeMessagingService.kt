@@ -9,16 +9,18 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.example.oversee.R
 import com.example.oversee.data.DeviceRepository
-import com.example.oversee.ui.parent.ParentDashboardActivity
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import androidx.core.content.edit
 
 class OverseeMessagingService : FirebaseMessagingService() {
 
-    private val TAG = "OverseeMessaging"
-    private val CHANNEL_ID = "incident_alerts"
-    private val NOTIFICATION_ID = 1001
+    companion object {
+        private const val TAG = "OverseeMessaging"
+        private const val CHANNEL_ID = "incident_alerts"
+        private const val NOTIFICATION_ID = 1001
+    }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
@@ -36,7 +38,7 @@ class OverseeMessagingService : FirebaseMessagingService() {
             }
         } else {
             getSharedPreferences("AppConfig", MODE_PRIVATE)
-                .edit().putString("pending_fcm_token", token).apply()
+                .edit { putString("pending_fcm_token", token) }
             Log.d(TAG, "User not logged in, FCM token queued for next sign-in")
         }
     }
@@ -69,7 +71,8 @@ class OverseeMessagingService : FirebaseMessagingService() {
     }
 
     private fun showIncidentNotification() {
-        val tapIntent = Intent(this, ParentDashboardActivity::class.java).apply {
+        // CHANGED: Point the intent to MainActivity instead
+        val tapIntent = Intent(this, com.example.oversee.MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("auto_refresh", true)
         }

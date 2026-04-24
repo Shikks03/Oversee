@@ -3,36 +3,26 @@ package com.example.oversee.ui.child
 // --- ANDROID & CORE ---
 import android.app.Activity
 import android.content.*
-import android.net.Uri
-import android.provider.Settings
 import android.widget.Toast
-import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 
 // --- JETPACK COMPOSE UI ---
-import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
@@ -41,25 +31,14 @@ import com.example.oversee.data.AuthRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.remote.FirebaseSyncManager
-import com.example.oversee.service.ScreenCaptureService
 import com.example.oversee.ui.components.inputs.OverSeePinPad
-import com.example.oversee.ui.components.inputs.OverSeeTextField
-import com.example.oversee.ui.components.dialogs.OverSeeDialog
 import com.example.oversee.ui.theme.AppTheme
-import com.google.firebase.FirebaseApp
+import com.example.oversee.utils.SystemHealthManager
 
 // --- UTILS ---
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.system.exitProcess
-
-// --- SECURE ADMIN COLOR THEME ---
-val AdminBackground = Color(0xFFF1F5F9)
-val AdminPrimary = Color(0xFF0F766E)
-val AdminPrimaryLight = Color(0xFFCCFBF1)
-val AdminTextGray = Color(0xFF64748B)
-val StatusGreen = Color(0xFF10B981)
-val StatusRed = Color(0xFFEF4444)
 
 // Standard Box Padding
 val BoxPadding = 24.dp
@@ -80,7 +59,10 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     var isReady by remember { mutableStateOf(false) }
     var isDeviceLinked by remember { mutableStateOf(UserRepository.getLocalTargetId(context) != "NOT_LINKED") }
+
+    // Dialog States
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showInfoDialog by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
 
     // --- PIN STATE ---
@@ -104,8 +86,21 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         healthStates["Firebase"] = SystemHealthManager.isFirebaseReady(context)
         healthStates["Capture"] = SystemHealthManager.isScreenCaptureActive()
 
-        // This only acts as the "Gatekeeper" to skip the setup wizard.
         isReady = (healthStates["Accessibility"] == true && healthStates["Overlay"] == true) || debugSkipPermissions
+    }
+
+    // FIXED: Explicitly declared as () -> Unit to satisfy Compose Button requirements
+    val triggerSync: () -> Unit = {
+        isRefreshing = true
+        FirebaseSyncManager.syncPendingLogs(context)
+        addToConsole("Sync Event: Manual cloud synchronization triggered.")
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            isRefreshing = false
+            val time = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+            lastSyncedTime = "Today, $time"
+            AppPreferenceManager.saveString(context, "last_synced", lastSyncedTime)
+            addToConsole("Sync Event: Complete.")
+        }, 1500)
     }
 
     LaunchedEffect(Unit) {
@@ -130,7 +125,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                 intent?.getStringExtra("message")?.let { addToConsole(it) }
             }
         }
-        context.registerReceiver(receiver, IntentFilter("com.example.oversee.CONSOLE_UPDATE"), Context.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(context, receiver, IntentFilter("com.example.oversee.CONSOLE_UPDATE"), ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
     }
 
@@ -175,32 +170,28 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                 }
             },
             bottomContent = {
-                TextButton(onClick = onExitApp) { Text("Exit to Home Screen", color = AdminTextGray, fontWeight = FontWeight.Bold) }
+                TextButton(onClick = onExitApp) { Text("Exit to Home Screen", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold) }
             }
         )
     } else {
         ChildDashboardScreen(
-            deviceId = deviceId, parentName = parentName, parentId = parentId, checks = healthStates,
+            deviceId = deviceId, parentName = parentName, checks = healthStates,
+            isRefreshing = isRefreshing, lastSyncedTime = lastSyncedTime, onForceSync = triggerSync,
             onFixPermission = { SystemHealthManager.navigateToSetting(context, it) },
-            onSettingsClick = { showSettingsDialog = true }
+            onSettingsClick = { showSettingsDialog = true },
+            onInfoClick = { showInfoDialog = true }
         )
+
+        // --- ACTIVE DIALOGS ---
+        if (showInfoDialog) {
+            HowToUseDialog(onDismiss = { showInfoDialog = false })
+        }
 
         if (showSettingsDialog) {
             ChildSettingsDialog(
-                deviceId = deviceId, lastSyncedTime = lastSyncedTime, consoleLogs = consoleLogs, isRefreshing = isRefreshing,
+                deviceId = deviceId, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
+                consoleLogs = consoleLogs,
                 onDismiss = { showSettingsDialog = false },
-                onForceSync = {
-                    isRefreshing = true
-                    FirebaseSyncManager.syncPendingLogs(context)
-                    addToConsole("Sync Event: Manual cloud synchronization triggered.")
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        isRefreshing = false
-                        val time = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
-                        lastSyncedTime = "Today, $time"
-                        AppPreferenceManager.saveString(context, "last_synced", lastSyncedTime)
-                        addToConsole("Sync Event: Complete.")
-                    }, 1500)
-                },
                 onChangePin = {
                     AppPreferenceManager.saveString(context, "child_pin", "")
                     savedChildPin = ""
@@ -222,76 +213,14 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 }
 
 // =========================================================================
-// SMART PIN FLOW LOGIC
-// =========================================================================
-
-@Composable
-fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) {
-    var stage by remember { mutableStateOf(if (parentPin.isNotBlank()) "ASK_PARENT" else "CREATE_NEW") }
-    var tempPin by remember { mutableStateOf("") }
-    var errorTxt by remember { mutableStateOf<String?>(null) }
-    var syncParentPin by remember { mutableStateOf(false) }
-
-    when (stage) {
-        "ASK_PARENT" -> {
-            OverSeePinPad(
-                title = "Use Parent PIN?",
-                subtitle = "An existing Parent Dashboard PIN was found. Enter it to secure this device as well.",
-                errorText = errorTxt,
-                onPinComplete = { entered ->
-                    if (entered == parentPin) onPinSaved(entered, false) else errorTxt = "Incorrect Parent PIN."
-                },
-                bottomContent = {
-                    TextButton(onClick = { stage = "CREATE_NEW" }) { Text("Create a Different PIN Instead", color = AdminPrimary, fontWeight = FontWeight.Bold) }
-                }
-            )
-        }
-        "CREATE_NEW" -> {
-            OverSeePinPad(
-                title = "Create PIN",
-                subtitle = "Set a 4-digit PIN to secure this dashboard from being tampered with.",
-                onPinComplete = { entered ->
-                    tempPin = entered
-                    stage = "CONFIRM_NEW"
-                },
-                bottomContent = {
-                    if (parentPin.isBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { syncParentPin = !syncParentPin }) {
-                            Checkbox(checked = syncParentPin, onCheckedChange = { syncParentPin = it }, colors = CheckboxDefaults.colors(checkedColor = AdminPrimary))
-                            Text("Use this PIN for Parent Dashboard too", fontSize = 14.sp, color = Color.DarkGray)
-                        }
-                    }
-                }
-            )
-        }
-        "CONFIRM_NEW" -> {
-            OverSeePinPad(
-                title = "Confirm PIN",
-                subtitle = "Re-enter your 4-digit PIN to confirm.",
-                errorText = errorTxt,
-                onPinComplete = { entered ->
-                    if (entered == tempPin) onPinSaved(entered, syncParentPin)
-                    else {
-                        errorTxt = "PINs do not match. Try again."
-                        stage = "CREATE_NEW"
-                    }
-                },
-                bottomContent = {
-                    TextButton(onClick = { stage = "CREATE_NEW"; errorTxt = null }) { Text("Start Over", color = AdminTextGray, fontWeight = FontWeight.Bold) }
-                }
-            )
-        }
-    }
-}
-
-// =========================================================================
-// MAIN DASHBOARD UI (Ultra Minimalist Redesign)
+// MAIN DASHBOARD UI
 // =========================================================================
 
 @Composable
 fun ChildDashboardScreen(
-    deviceId: String, parentName: String, parentId: String, checks: Map<String, Boolean>,
-    onFixPermission: (String) -> Unit, onSettingsClick: () -> Unit
+    deviceId: String, parentName: String, checks: Map<String, Boolean>,
+    isRefreshing: Boolean, lastSyncedTime: String, onForceSync: () -> Unit,
+    onFixPermission: (String) -> Unit, onSettingsClick: () -> Unit, onInfoClick: () -> Unit
 ) {
     val isSystemActive = checks["Accessibility"] == true &&
             checks["Notifications"] == true &&
@@ -299,7 +228,7 @@ fun ChildDashboardScreen(
             checks["Internet"] == true &&
             checks["Firebase"] == true
 
-    val topHalfColor = if (isSystemActive) StatusGreen else StatusRed
+    val topHalfColor = if (isSystemActive) AppTheme.ChildSuccess else AppTheme.ChildError
 
     Box(modifier = Modifier.fillMaxSize().background(topHalfColor)) {
 
@@ -312,35 +241,38 @@ fun ChildDashboardScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            // --- INFO HEADER ---
+            // --- UPDATED: CLEAN HEADER ---
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("Device ID: $deviceId", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                    Text("Connected to: $parentName", color = Color.White.copy(alpha = 0.9f), fontSize = 14.sp)
-                }
-                Surface(color = Color.White.copy(alpha = 0.2f), shape = RoundedCornerShape(8.dp)) {
-                    Text("Parent ID: $parentId", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+                Surface(
+                    color = Color.White.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Protected by OverSee", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
 
             Spacer(Modifier.weight(1f))
 
-            // --- MASSIVE CENTERED CIRCLE ---
+            val dynamicCircleSize = com.example.oversee.ui.theme.Responsive.dashboardCircleSize()
             Box(
                 modifier = Modifier
-                    .size(180.dp)
+                    .size(dynamicCircleSize)
                     .background(Color.White, CircleShape)
                     .padding(8.dp),
                 contentAlignment = Alignment.Center
-            ) {
+            ){
                 if (isSystemActive) {
-                    Icon(Icons.Rounded.VerifiedUser, contentDescription = "System Ready", tint = StatusGreen, modifier = Modifier.size(100.dp))
+                    Icon(Icons.Rounded.VerifiedUser, contentDescription = "System Ready", tint = AppTheme.ChildSuccess, modifier = Modifier.size(100.dp))
                 } else {
-                    Icon(Icons.Rounded.Shield, contentDescription = "Action Required", tint = StatusRed, modifier = Modifier.size(100.dp))
+                    Icon(Icons.Rounded.Shield, contentDescription = "Action Required", tint = AppTheme.ChildError, modifier = Modifier.size(100.dp))
                 }
             }
 
@@ -362,6 +294,36 @@ fun ChildDashboardScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
+            Spacer(Modifier.height(24.dp))
+
+            // --- IN-DASHBOARD SYNC BUTTON WITH LAST SYNC TEXT ---
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Button(
+                    onClick = onForceSync,
+                    enabled = !isRefreshing,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.2f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.height(40.dp)
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Rounded.Sync, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Sync Now", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // NEW: Shows the exact time beneath the button
+                Text(
+                    text = "Last synced: $lastSyncedTime",
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+
             Spacer(Modifier.weight(1f))
         }
 
@@ -369,10 +331,10 @@ fun ChildDashboardScreen(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .wrapContentHeight() // Automatically shrinks to tightly wrap the grid
+                .wrapContentHeight()
                 .align(Alignment.BottomCenter),
             shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
-            color = AdminBackground,
+            color = AppTheme.ChildBackground,
             shadowElevation = 16.dp
         ) {
             Column(
@@ -380,7 +342,7 @@ fun ChildDashboardScreen(
                     .fillMaxWidth()
                     .padding(BoxPadding)
             ) {
-                // Settings Icon (No Dashboard Text)
+                // Toolbar (Info & Settings)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -390,16 +352,25 @@ fun ChildDashboardScreen(
                         modifier = Modifier
                             .size(40.dp)
                             .background(Color.White, RoundedCornerShape(12.dp))
+                            .clickable { onInfoClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Info, contentDescription = "How to use", tint = AppTheme.ChildAccent, modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color.White, RoundedCornerShape(12.dp))
                             .clickable { onSettingsClick() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = AdminPrimary, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = AppTheme.ChildAccent, modifier = Modifier.size(20.dp))
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
 
-                // The new ultra-compact single-row icon indicator!
                 SystemHealthRowSection(checks, onFixPermission)
 
                 Spacer(Modifier.height(24.dp))
@@ -409,25 +380,42 @@ fun ChildDashboardScreen(
 }
 
 // =========================================================================
-// NEW: ULTRA COMPACT SERVICE STATUS INDICATOR ROW
+// INTERACTIVE SERVICE STATUS INDICATOR
 // =========================================================================
 
 @Composable
 fun SystemHealthRowSection(checks: Map<String, Boolean>, onFix: (String) -> Unit) {
+    val hasError = checks.values.any { !it }
+    val context = LocalContext.current
+
     Column(modifier = Modifier.fillMaxWidth()) {
+
         Text(
             text = "Service Status",
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = AdminTextGray,
+            color = AppTheme.ChildTextSecondary,
             modifier = Modifier.padding(start = 4.dp)
         )
 
+        if (hasError) {
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 4.dp)) {
+                Icon(Icons.Rounded.TouchApp, contentDescription = null, tint = AppTheme.ChildError, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = "Tap red icons to grant permissions",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppTheme.ChildError
+                )
+            }
+        }
+
         Spacer(Modifier.height(12.dp))
 
-        // Single row spreading the icons perfectly across the width
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -435,6 +423,7 @@ fun SystemHealthRowSection(checks: Map<String, Boolean>, onFix: (String) -> Unit
 
             checkKeys.forEach { label ->
                 val isOk = checks[label] == true
+
                 val icon = when(label) {
                     "Accessibility" -> Icons.Rounded.Visibility
                     "Notifications" -> Icons.Rounded.Notifications
@@ -445,201 +434,52 @@ fun SystemHealthRowSection(checks: Map<String, Boolean>, onFix: (String) -> Unit
                     else -> Icons.Rounded.Settings
                 }
 
-                // Raw Icons: No text, no background. Just the color state.
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = if (isOk) StatusGreen else StatusRed,
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable { if (!isOk) onFix(label) }
-                )
-            }
-        }
-    }
-}
+                val shortLabel = when(label) {
+                    "Accessibility" -> "Access"
+                    "Notifications" -> "Alerts"
+                    "Overlay" -> "Overlay"
+                    "Internet" -> "Network"
+                    "Firebase" -> "Sync"
+                    "Capture" -> "Screen"
+                    else -> "Setting"
+                }
 
-// =========================================================================
-// SETTINGS DIALOG (Holds all the extra features)
-// =========================================================================
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ChildSettingsDialog(
-    deviceId: String, lastSyncedTime: String, consoleLogs: List<String>, isRefreshing: Boolean,
-    onDismiss: () -> Unit, onForceSync: () -> Unit, onChangePin: () -> Unit, onEditId: (String) -> Unit,
-    onExitApp: () -> Unit, onDebugResetRole: () -> Unit
-) {
-    var showSyncHistory by remember { mutableStateOf(false) }
-    var showActivityConsole by remember { mutableStateOf(false) }
-    var showEditId by remember { mutableStateOf(false) }
-
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("Device Settings", fontWeight = FontWeight.Bold) },
-                    navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, null) } },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-                )
-            },
-            containerColor = AdminBackground
-        ) { padding ->
-            LazyColumn(modifier = Modifier.padding(padding).fillMaxSize().padding(BoxPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
-                item { Text("Synchronization", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AdminPrimary, modifier = Modifier.padding(start = 8.dp)) }
-                item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column {
-                            SettingsRow(icon = Icons.Rounded.Sync, title = "Sync Now", subtitle = "Last synced: $lastSyncedTime", onClick = onForceSync, isLoading = isRefreshing)
-                            Divider(color = AdminBackground)
-                            SettingsRow(icon = Icons.Rounded.History, title = "Sync History", onClick = { showSyncHistory = true })
-                        }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(
+                                color = if (isOk) AppTheme.ChildSuccess.copy(alpha = 0.1f) else AppTheme.ChildError.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable {
+                                if (!isOk) {
+                                    onFix(label)
+                                } else {
+                                    Toast.makeText(context, "$label is already active", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = label,
+                            tint = if (isOk) AppTheme.ChildSuccess else AppTheme.ChildError,
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
+
+                    Text(
+                        text = shortLabel,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = AppTheme.ChildTextSecondary,
+                        maxLines = 1
+                    )
                 }
-
-                item { Spacer(Modifier.height(8.dp)) }
-                item { Text("Security", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AdminPrimary, modifier = Modifier.padding(start = 8.dp)) }
-                item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column {
-                            SettingsRow(icon = Icons.Rounded.LockReset, title = "Change PIN", onClick = onChangePin)
-                            Divider(color = AdminBackground)
-                            SettingsRow(icon = Icons.Rounded.ExitToApp, title = "Lock & Exit Dashboard", onClick = onExitApp, isDestructive = true)
-                        }
-                    }
-                }
-
-                item { Spacer(Modifier.height(8.dp)) }
-                item { Text("Debug & Advanced", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AdminTextGray, modifier = Modifier.padding(start = 8.dp)) }
-                item {
-                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column {
-                            SettingsRow(icon = Icons.Rounded.Edit, title = "Edit Local Device ID", onClick = { showEditId = true })
-                            Divider(color = AdminBackground)
-                            SettingsRow(icon = Icons.Rounded.Terminal, title = "View Activity Console", onClick = { showActivityConsole = true })
-                            Divider(color = AdminBackground)
-                            SettingsRow(icon = Icons.Rounded.Refresh, title = "Reset Role (Keep ID)", onClick = onDebugResetRole, isDestructive = true)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if (showSyncHistory) SyncHistoryDialog(consoleLogs, onDismiss = { showSyncHistory = false })
-    if (showActivityConsole) ActivityConsoleDialog(consoleLogs, onDismiss = { showActivityConsole = false })
-    if (showEditId) EditDeviceIdDialog(deviceId, onDismiss = { showEditId = false }, onConfirm = { onEditId(it); showEditId = false })
-}
-
-@Composable
-fun SettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String? = null, onClick: () -> Unit, isDestructive: Boolean = false, isLoading: Boolean = false) {
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(enabled = !isLoading) { onClick() }.padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, null, tint = if (isDestructive) StatusRed else AdminTextGray, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (isDestructive) StatusRed else Color.Black)
-            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = AdminTextGray)
-        }
-        if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = AdminPrimary)
-        else Icon(Icons.Rounded.ChevronRight, null, tint = Color.LightGray)
-    }
-}
-
-// =========================================================================
-// SUB-COMPONENTS & DIALOGS
-// =========================================================================
-
-@Composable
-fun SyncHistoryDialog(consoleLogs: List<String>, onDismiss: () -> Unit) {
-    val syncEvents = remember(consoleLogs) { consoleLogs.filter { it.contains("Sync Event") } }
-    OverSeeDialog(title = "Sync History", description = "Recent manual and automated sync events.", confirmText = "Close", onConfirm = onDismiss, onDismiss = onDismiss) {
-        if (syncEvents.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) { Text("No recent syncs recorded.", color = AdminTextGray, fontSize = 14.sp) }
-        } else {
-            LazyColumn(modifier = Modifier.heightIn(max = 300.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(syncEvents) { log ->
-                    Card(colors = CardDefaults.cardColors(containerColor = AdminBackground), shape = RoundedCornerShape(12.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.CloudSync, null, tint = AdminPrimary, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(12.dp))
-                            Text(log, fontSize = 12.sp, color = Color.DarkGray, lineHeight = 16.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ActivityConsoleDialog(consoleLogs: List<String>, onDismiss: () -> Unit) {
-    OverSeeDialog(title = "Activity Console", description = "System logs for debugging.", confirmText = "Close", onConfirm = onDismiss, onDismiss = onDismiss) {
-        Card(modifier = Modifier.fillMaxWidth().height(300.dp), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = AdminBackground)) {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                items(consoleLogs) { log ->
-                    Text(text = log, color = Color.DarkGray, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, modifier = Modifier.padding(bottom = 8.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun EditDeviceIdDialog(currentId: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember { mutableStateOf(currentId) }
-    OverSeeDialog(title = "Edit Device ID", confirmText = "Save", onConfirm = { onConfirm(text) }, onDismiss = onDismiss) {
-        OverSeeTextField(value = text, onValueChange = { text = it }, label = "Device ID", modifier = Modifier.fillMaxWidth())
-    }
-}
-
-// Setup Screens omitted for brevity (they remain identical to your previous code)
-@Composable
-fun ChildLinkSetupScreen(deviceId: String, onLinkConfirmed: () -> Unit, onLogout: () -> Unit) { /* Existing UI */ }
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun PermissionsSetupScreen(checks: Map<String, Boolean>, onFixPermission: (String) -> Unit, onCheckAgain: () -> Unit, onDebugSkip: () -> Unit) {
-    val allGood = checks["Accessibility"] == true && checks["Overlay"] == true
-    Scaffold(
-        containerColor = AdminBackground,
-        topBar = {
-            Row(modifier = Modifier.fillMaxWidth().padding(BoxPadding), verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(48.dp).background(Color.White, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { Icon(Icons.Rounded.Settings, null, tint = AdminPrimary) }
-                Spacer(Modifier.width(20.dp))
-                Text(text = "Required Permissions", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
-            }
-        }
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = BoxPadding), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(text = "OverSee needs these permissions to monitor the device in the background.", fontSize = 15.sp, textAlign = TextAlign.Center, color = AdminTextGray, lineHeight = 22.sp)
-            Spacer(Modifier.height(36.dp))
-            FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp), maxItemsInEachRow = 2) {
-                PermissionGridItem(title = "Accessibility", icon = Icons.Rounded.Visibility, isGranted = checks["Accessibility"] == true, modifier = Modifier.weight(1f), onClick = { onFixPermission("Accessibility") })
-                PermissionGridItem(title = "Overlay", icon = Icons.Rounded.Layers, isGranted = checks["Overlay"] == true, modifier = Modifier.weight(1f), onClick = { onFixPermission("Overlay") })
-            }
-            Spacer(Modifier.weight(1f))
-            Button(onClick = onCheckAgain, enabled = allGood, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = if (allGood) AdminPrimary else Color.LightGray), shape = RoundedCornerShape(16.dp)) {
-                Text(text = if (allGood) "START MONITORING" else "COMPLETE SETUP", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            }
-            Spacer(Modifier.height(16.dp))
-            TextButton(onClick = onDebugSkip) { Text("Debug: Skip Permissions", color = AdminTextGray, fontSize = 13.sp) }
-            Spacer(Modifier.height(16.dp))
-        }
-    }
-}
-
-@Composable
-fun PermissionGridItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isGranted: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Card(modifier = modifier.height(190.dp), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(modifier = Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
-            Box(modifier = Modifier.size(64.dp).background(if (isGranted) StatusGreen.copy(alpha = 0.1f) else AdminPrimaryLight, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) { Icon(imageVector = icon, contentDescription = null, tint = if (isGranted) StatusGreen else AdminPrimary, modifier = Modifier.size(32.dp)) }
-            Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
-            Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(40.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isGranted) StatusGreen else AdminPrimary), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(0.dp)) {
-                Text(text = if (isGranted) "Granted" else "Enable", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
             }
         }
     }
@@ -654,9 +494,10 @@ fun PermissionGridItem(title: String, icon: androidx.compose.ui.graphics.vector.
 fun ChildDashboardScreenPreviewActive() {
     MaterialTheme {
         ChildDashboardScreen(
-            deviceId = "847291", parentName = "Jane Doe", parentId = "JANE-123",
+            deviceId = "847291", parentName = "Jane Doe",
             checks = mapOf("Accessibility" to true, "Notifications" to true, "Overlay" to true, "Internet" to true, "Firebase" to true, "Capture" to false),
-            onFixPermission = {}, onSettingsClick = {}
+            isRefreshing = false, lastSyncedTime = "Today, 10:45 AM", onForceSync = {},
+            onFixPermission = {}, onSettingsClick = {}, onInfoClick = {}
         )
     }
 }
@@ -666,35 +507,10 @@ fun ChildDashboardScreenPreviewActive() {
 fun ChildDashboardScreenPreviewError() {
     MaterialTheme {
         ChildDashboardScreen(
-            deviceId = "847291", parentName = "Jane Doe", parentId = "JANE-123",
+            deviceId = "847291", parentName = "Jane Doe",
             checks = mapOf("Accessibility" to true, "Notifications" to false, "Overlay" to true, "Internet" to true, "Firebase" to true, "Capture" to false),
-            onFixPermission = {}, onSettingsClick = {}
+            isRefreshing = true, lastSyncedTime = "Yesterday, 3:12 PM", onForceSync = {},
+            onFixPermission = {}, onSettingsClick = {}, onInfoClick = {}
         )
-    }
-}
-
-// --- UTILS ---
-private object SystemHealthManager {
-    fun isAccessibilityOn(context: Context): Boolean {
-        val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
-        return am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK).any { it.resolveInfo.serviceInfo.packageName == context.packageName }
-    }
-    fun isNotificationOn(context: Context): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled()
-    fun isOverlayOn(context: Context): Boolean = Settings.canDrawOverlays(context)
-    fun isInternetOn(context: Context): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        @Suppress("DEPRECATION") return cm.activeNetworkInfo?.isConnected == true
-    }
-    fun isFirebaseReady(context: Context): Boolean = FirebaseApp.getApps(context).isNotEmpty()
-    fun isScreenCaptureActive(): Boolean = ScreenCaptureService.CaptureState.isRunning
-
-    fun navigateToSetting(context: Context, label: String) {
-        val intent = when (label) {
-            "Accessibility" -> Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            "Notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply { putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName) }
-            "Overlay" -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-            else -> null
-        }
-        intent?.let { context.startActivity(it) }
     }
 }
