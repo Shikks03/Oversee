@@ -12,6 +12,7 @@ object ToxicityScorer {
     data class ScoredWord(
         val rawToken: String,
         val matchedWord: String,
+        val originalText: String,
         val toxicityScore: Int,          // 1..6
         val severity: String,            // "Mild" | "Moderate" | "Severe"
         val isAllCaps: Boolean,
@@ -56,6 +57,7 @@ object ToxicityScorer {
             ScoredWord(
                 rawToken          = dw.rawToken,
                 matchedWord       = dw.matchedWord,
+                originalText      = dw.originalText,
                 toxicityScore     = s,
                 severity          = classifySeverity(s),
                 isAllCaps         = dw.isAllCaps,

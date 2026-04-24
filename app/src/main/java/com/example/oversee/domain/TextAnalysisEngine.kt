@@ -60,6 +60,7 @@ class TextAnalysisEngine private constructor(
     data class DetectedWord(
         val rawToken: String,            // the normalized token (lowercased, cleaned)
         val matchedWord: String,         // the reference word it matched
+        val originalText: String,
         val similarityScore: Float,      // 1 - (dist / max(token.len, ref.len))
         val levenshteinDistance: Int,
         val tokenIndex: Int,             // position in AnalysisResult.rawTokens (pre-filter)
@@ -100,6 +101,7 @@ class TextAnalysisEngine private constructor(
                         bestMatch = DetectedWord(
                             rawToken = norm.text,
                             matchedWord = refWord,
+                            originalText = raw,
                             similarityScore = sim,
                             levenshteinDistance = dist,
                             tokenIndex = idx,
@@ -137,6 +139,7 @@ class TextAnalysisEngine private constructor(
                         DetectedWord(
                             rawToken = concat,
                             matchedWord = refParts.joinToString(" "),
+                            originalText = "${rawTokens[i]} ${rawTokens[i + 1]}",
                             similarityScore = sim,
                             levenshteinDistance = dist,
                             tokenIndex = i,
@@ -170,6 +173,7 @@ class TextAnalysisEngine private constructor(
                         DetectedWord(
                             rawToken = concat,
                             matchedWord = refWord,
+                            originalText = "${rawTokens[i]} ${rawTokens[i + 1]}",
                             similarityScore = similarityScore(concat, refWord, dist),
                             levenshteinDistance = dist,
                             tokenIndex = i,
