@@ -58,6 +58,7 @@ class TextAnalysisEngine private constructor(
     // ─────────────────────────────────────────────────────────────
 
     data class DetectedWord(
+        val originalText: String,        // NEW: The exact text from the screen (e.g., "T@ng1n@")
         val rawToken: String,            // the normalized token (lowercased, cleaned)
         val matchedWord: String,         // the reference word it matched
         val originalText: String,
@@ -99,6 +100,7 @@ class TextAnalysisEngine private constructor(
                 if (isFuzzyMatch(norm.text, refWord, dist, hasObfuscationSignal)) {
                     if (bestMatch == null || sim > bestMatch.similarityScore) {
                         bestMatch = DetectedWord(
+                            originalText = raw,
                             rawToken = norm.text,
                             matchedWord = refWord,
                             originalText = raw,
@@ -137,6 +139,7 @@ class TextAnalysisEngine private constructor(
                 if (isFuzzyMatch(concat, refConcat, dist, obf)) {
                     phraseDetections.add(
                         DetectedWord(
+                            originalText = "${rawTokens[i]} ${rawTokens[i + 1]}", // <--- PASS ORIGINAL PHRASE
                             rawToken = concat,
                             matchedWord = refParts.joinToString(" "),
                             originalText = "${rawTokens[i]} ${rawTokens[i + 1]}",
@@ -171,6 +174,7 @@ class TextAnalysisEngine private constructor(
                 if (isFuzzyMatch(concat, refWord, dist, obf)) {
                     phraseDetections.add(
                         DetectedWord(
+                            originalText = "${rawTokens[i]} ${rawTokens[i + 1]}", // <--- PASS ORIGINAL PHRASE
                             rawToken = concat,
                             matchedWord = refWord,
                             originalText = "${rawTokens[i]} ${rawTokens[i + 1]}",
