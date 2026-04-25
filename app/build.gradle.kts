@@ -45,6 +45,8 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.01.00"))
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
 
+    implementation("com.google.mlkit:text-recognition:16.0.0")
+
     // Compose Libraries
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
