@@ -19,23 +19,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oversee.ui.child.CapturePermissionActivity
-
 
 class OverlayService : Service() {
 
     companion object {
         private const val TAG = "OverlayService"
         const val ACTION_CAPTURE_STARTED = "com.example.oversee.CAPTURE_STARTED"
+
+        // --- NEW: Overlay Modes ---
+        const val EXTRA_OVERLAY_MODE = "overlay_mode"
+        const val MODE_REQUIRE_MONITORING = "mode_require_monitoring"
+        const val MODE_SEVERE_WARNING = "mode_severe_warning"
     }
 
     private lateinit var windowManager: WindowManager
-    private var blockerView: ComposeView? = null // Updated to ComposeView
+    private var blockerView: ComposeView? = null
+    private var currentMode: String = MODE_REQUIRE_MONITORING
 
-    // --- BROADCAST RECEIVER ---
     private val captureStartReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_CAPTURE_STARTED) {
@@ -44,39 +47,33 @@ class OverlayService : Service() {
         }
     }
 
-    // --- LIFECYCLE ---
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-
-        // 1. Register receiver to know when to dismiss (keep this as is)
         val filter = IntentFilter(ACTION_CAPTURE_STARTED)
         registerReceiver(captureStartReceiver, filter, RECEIVER_NOT_EXPORTED)
-
-        // 2. LOGIC CHECK: Only show the blocker if capture is NOT already running
-        if (!ScreenCaptureService.CaptureState.isRunning) {
-            showBlocker()
-        } else {
-            // If it's already running, this service is not needed right now
-            stopSelf()
-        }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        currentMode = intent?.getStringExtra(EXTRA_OVERLAY_MODE) ?: MODE_REQUIRE_MONITORING
+
+        // Only skip if we are asking for permission AND it's already running
+        if (currentMode == MODE_REQUIRE_MONITORING && ScreenCaptureService.CaptureState.isRunning) {
+            stopSelf()
+            return START_STICKY
+        }
+
+        showBlocker()
+        return START_STICKY
+    }
 
     override fun onDestroy() {
-        try {
-            unregisterReceiver(captureStartReceiver)
-        } catch (e: Exception) {
-            Log.e(TAG, "Receiver not registered")
-        }
+        try { unregisterReceiver(captureStartReceiver) } catch (e: Exception) {}
         removeBlocker()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    // --- OVERLAY LOGIC ---
 
     private fun showBlocker() {
         if (blockerView != null) return
@@ -90,19 +87,23 @@ class OverlayService : Service() {
                 PixelFormat.TRANSLUCENT
             )
 
-            // Initialize ComposeView
             blockerView = ComposeView(this).apply {
-                // Attach a fake lifecycle owner so Compose can run in a Service
                 val lifecycleOwner = ServiceLifecycleOwner()
                 lifecycleOwner.attachToView(this)
 
                 setContent {
                     MaterialTheme {
-                        MonitoringBlocker(onEnableClick = { startPermissionActivity() }, onDeclineClick = { handleDecline() })
+                        OverseeOverlay(
+                            mode = currentMode,
+                            onPrimaryClick = {
+                                if (currentMode == MODE_REQUIRE_MONITORING) startPermissionActivity()
+                                else handleDecline() // For warning, primary action is to leave app
+                            },
+                            onSecondaryClick = { handleDecline() }
+                        )
                     }
                 }
             }
-
             windowManager.addView(blockerView, params)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show overlay: ${e.message}")
@@ -124,30 +125,24 @@ class OverlayService : Service() {
         startActivity(intent)
     }
 
-    /**
-     * Logic: Minimizes the current app and removes the overlay.
-     */
     private fun handleDecline() {
-        // 1. Move the current task (Facebook) to the background by going Home
         val homeIntent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         startActivity(homeIntent)
-
-        // 2. Remove the blocker so the device is usable
         removeBlocker()
     }
 }
 
-// --- COMPOSABLE UI ---
-
 @Composable
-fun MonitoringBlocker(onEnableClick: () -> Unit, onDeclineClick: () -> Unit) {
+fun OverseeOverlay(mode: String, onPrimaryClick: () -> Unit, onSecondaryClick: () -> Unit) {
+    val isWarning = mode == OverlayService.MODE_SEVERE_WARNING
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.85f)),
+            .background(if (isWarning) Color(0xD9000000) else Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Card(
@@ -161,57 +156,35 @@ fun MonitoringBlocker(onEnableClick: () -> Unit, onDeclineClick: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "Monitoring Required",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black // In Dark Mode, ensures visibility
+                    text = if (isWarning) "Take a Breath" else "Monitoring Required",
+                    fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Black
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "To use Facebook, you must enable screen monitoring.",
-                    fontSize = 16.sp,
-                    color = Color.Gray,
+                    text = if (isWarning) "We noticed some highly negative interactions. Let's take a quick break from Facebook."
+                    else "To use Facebook, you must enable screen monitoring.",
+                    fontSize = 16.sp, color = Color.Gray,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Primary Action: Enable
                 Button(
-                    onClick = onEnableClick,
+                    onClick = onPrimaryClick,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isWarning) Color(0xFF1976D2) else Color(0xFFD32F2F)
+                    )
                 ) {
-                    Text("Enable & Continue", color = Color.White)
+                    Text(if (isWarning) "Close App" else "Enable & Continue", color = Color.White)
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Choice Action: Exit App
-                TextButton(
-                    onClick = onDeclineClick,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Not Now (Exit App)", color = Color.Gray)
+                if (!isWarning) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(onClick = onSecondaryClick, modifier = Modifier.fillMaxWidth()) {
+                        Text("Not Now (Exit App)", color = Color.Gray)
+                    }
                 }
             }
-        }
-    }
-}
-// --- PREVIEWS ---
-
-/**
- * Preview for the Monitoring Block Overlay.
- * Simulates how the screen looks when the child is blocked from using the app.
- */
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun MonitoringBlockerPreview() {
-    MaterialTheme {
-        // We use a Box to simulate the full-screen overlay effect
-        Box(modifier = Modifier.fillMaxSize()) {
-            MonitoringBlocker(
-                onEnableClick = {}, onDeclineClick = {}
-            )
         }
     }
 }

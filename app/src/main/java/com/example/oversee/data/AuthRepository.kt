@@ -27,6 +27,11 @@ object AuthRepository {
                             // Switch back to Main Thread for UI updates
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 com.example.oversee.data.local.KeyManager.sessionKek = derivedKek
+
+                                // --- NEW: Save the KEK to secure hardware storage so it survives restarts ---
+                                val kekBase64 = android.util.Base64.encodeToString(derivedKek.encoded, android.util.Base64.NO_WRAP)
+                                com.example.oversee.data.local.AppPreferenceManager.saveString(context, "secure_session_kek", kekBase64)
+
                                 UserRepository.refreshLocalProfile(context, uid) {
                                     context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
                                         .edit().remove("pending_fcm_token").apply()
@@ -63,6 +68,10 @@ object AuthRepository {
 
                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                         com.example.oversee.data.local.KeyManager.sessionKek = derivedKek
+
+                        // --- NEW: Save the KEK to secure hardware storage so it survives restarts ---
+                        val kekBase64 = android.util.Base64.encodeToString(derivedKek.encoded, android.util.Base64.NO_WRAP)
+                        com.example.oversee.data.local.AppPreferenceManager.saveString(context, "secure_session_kek", kekBase64)
 
                         FirebaseUserManager.createUserProfile(uid, profile) {
                             UserRepository.refreshLocalProfile(context, uid) {

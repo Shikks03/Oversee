@@ -249,6 +249,7 @@ class ScreenCaptureService : Service() {
                         if (now - lastSeen > DEBOUNCE_TIME_MS) {
                             debounceMap[scored.matchedWord] = now
                             val severity = mapSeverity(scored.severity)
+
                             IncidentRepository.saveIncident(
                                 applicationContext,
                                 Incident(
@@ -258,6 +259,16 @@ class ScreenCaptureService : Service() {
                                     appName = "Facebook"
                                 )
                             )
+                            // --- NEW: Trigger Actions for HIGH severity ---
+                            if (severity == "HIGH") {
+
+                                // Pop up the blocking overlay over Facebook
+                                val overlayIntent = Intent(applicationContext, OverlayService::class.java).apply {
+                                    putExtra(OverlayService.EXTRA_OVERLAY_MODE, OverlayService.MODE_SEVERE_WARNING)
+                                }
+                                startService(overlayIntent)
+                            }
+
                             Log.d("OCR_TRACE", "[$id] 🚨 FLAG CAUGHT: Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
                             sendConsoleUpdate("🚨 FLAG CAUGHT: OCR Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
                         } else {

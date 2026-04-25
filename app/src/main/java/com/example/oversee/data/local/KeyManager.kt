@@ -27,7 +27,17 @@ object KeyManager {
     private var cachedKey: SecretKey? = null
 
     // --- NEW: Holds the user's password-derived KEK for this active session ---
-    var sessionKek: SecretKey? = null
+    private var _sessionKek: SecretKey? = null
+    var sessionKek: SecretKey?
+        get() {
+            // If it's in memory, use it
+            if (_sessionKek != null) return _sessionKek
+
+            // If not, try to recover it from secure hardware storage (AndroidX Security)
+            // Note: This requires a Context. We can use a workaround or pass it in.
+            return null
+        }
+        set(value) { _sessionKek = value }
 
     /**
      * Child-device path: generates a new key if none exists anywhere.
