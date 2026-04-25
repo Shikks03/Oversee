@@ -94,15 +94,20 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
     // FIXED: Explicitly declared as () -> Unit to satisfy Compose Button requirements
     val triggerSync: () -> Unit = {
         isRefreshing = true
-        FirebaseSyncManager.syncPendingLogs(context)
         addToConsole("Sync Event: Manual cloud synchronization triggered.")
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        FirebaseSyncManager.syncPendingLogs(context) { uploaded, error ->
             isRefreshing = false
             val time = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
             lastSyncedTime = "Today, $time"
             AppPreferenceManager.saveString(context, "last_synced", lastSyncedTime)
-            addToConsole("Sync Event: Complete.")
-        }, 1500)
+            if (error != null) {
+                addToConsole("Sync Event: Failed — $error")
+            } else if (uploaded == 0) {
+                addToConsole("Sync Event: Already up to date.")
+            } else {
+                addToConsole("Sync Event: Complete. $uploaded incident(s) uploaded.")
+            }
+        }
     }
 
     LaunchedEffect(Unit) {

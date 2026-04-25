@@ -58,6 +58,13 @@ fun ParentDashboardScreen(
     var sharedStartDate by remember { mutableLongStateOf(defaultStart) }
     var sharedEndDate by remember { mutableLongStateOf(defaultEnd) }
 
+    val onRefreshAndExtendRange = remember(onRefresh) {
+        {
+            sharedEndDate = System.currentTimeMillis()
+            onRefresh()
+        }
+    }
+
     BackHandler(enabled = currentTab != 0) {
         currentTab = when (currentTab) {
             in 6..14 -> 3
@@ -84,7 +91,7 @@ fun ParentDashboardScreen(
                 0 -> DashboardOverviewScreen(
                     targetId = liveTargetId, targetNickname = liveTargetNickname, incidents = incidents,
                     startDate = sharedStartDate, endDate = sharedEndDate, refreshing = refreshing,
-                    onRefresh = onRefresh, onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
+                    onRefresh = onRefreshAndExtendRange, onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
                     onEditClick = { showEditDialog = true },
                     onNavigateToLogs = { currentTab = 2 }, onNotificationClick = { currentTab = 5 }
                 )
@@ -92,7 +99,7 @@ fun ParentDashboardScreen(
                 2 -> ActivityLogScreen(
                     incidents = incidents, startDate = sharedStartDate, endDate = sharedEndDate,
                     onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
-                    refreshing = refreshing, onRefresh = onRefresh, onDebugResetRole = onDebugResetRole
+                    refreshing = refreshing, onRefresh = onRefreshAndExtendRange, onDebugResetRole = onDebugResetRole
                 )
                 3 -> SettingsScreen(
                     onLogoutClick = { showLogoutDialog = true }, onDebugResetRole = onDebugResetRole, onSyncHistoryClick = { currentTab = 6 },
@@ -108,7 +115,7 @@ fun ParentDashboardScreen(
                     currentTab = 2
                 })
                 // Settings Sub-Routes
-                6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefresh)
+                6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefreshAndExtendRange)
                 7 -> EditProfileScreen(onBackClick = { currentTab = 3 })
                 8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
                 9 -> ExportDataScreen(onBackClick = { currentTab = 3 })
