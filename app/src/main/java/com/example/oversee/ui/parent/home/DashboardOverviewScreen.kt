@@ -71,15 +71,6 @@ fun DashboardOverviewScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Overview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-
-            Box(contentAlignment = Alignment.TopEnd) {
-                IconButton(onClick = onNotificationClick) {
-                    Icon(Icons.Rounded.Notifications, contentDescription = "Notifications", tint = AppTheme.Primary)
-                }
-                if (highAlertsCount > 0) {
-                    Box(modifier = Modifier.padding(top = 12.dp, end = 12.dp).size(10.dp).background(AppTheme.Error, CircleShape))
-                }
-            }
         }
 
         // --- EMPTY STATE ROUTING ---

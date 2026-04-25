@@ -16,3 +16,14 @@ fun Context.sendConsoleUpdate(message: String) {
     }
     sendBroadcast(intent)
 }
+
+/**
+ * Extension to read a text file from the assets folder.
+ */
+fun android.content.Context.readAssetFile(fileName: String): String {
+    return try {
+        assets.open(fileName).bufferedReader().use { it.readText() }
+    } catch (e: Exception) {
+        "Error loading content: ${e.message}"
+    }
+}

@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.ui.components.inputs.OverSeeTextField // NEW IMPORT
 import com.example.oversee.ui.theme.AppTheme
+import com.example.oversee.utils.readAssetFile
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -220,225 +221,52 @@ fun DeleteAccountScreen(onBackClick: () -> Unit) {
     }
 }
 
-// --- 5. PIN / Biometric Lock ---
-@Composable
-fun PinLockScreen(
-    onBackClick: () -> Unit,
-    initialPinEnabled: Boolean? = null,
-    initialBiometricsEnabled: Boolean? = null
-) {
-    val context = LocalContext.current
-    var isPinEnabled by remember { mutableStateOf(initialPinEnabled ?: AppPreferenceManager.getBoolean(context, "pin_enabled", false)) }
-    var isBiometricsEnabled by remember { mutableStateOf(initialBiometricsEnabled ?: AppPreferenceManager.getBoolean(context, "biometrics_enabled", false)) }
-    var pin by remember { mutableStateOf(AppPreferenceManager.getString(context, "saved_pin", "")) }
-
-    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
-        SettingsTopBar("App Lock", onBackClick)
-        Column(modifier = Modifier.padding(AppTheme.PaddingDefault), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Require PIN", fontWeight = FontWeight.Bold)
-                    Text("Ask for PIN when opening OverSee", fontSize = 12.sp, color = Color.Gray)
-                }
-                Switch(checked = isPinEnabled, onCheckedChange = {
-                    isPinEnabled = it
-                    AppPreferenceManager.saveBoolean(context, "pin_enabled", it)
-                    if (!it) {
-                        isBiometricsEnabled = false
-                        AppPreferenceManager.saveBoolean(context, "biometrics_enabled", false)
-                    }
-                })
-            }
-
-            if (isPinEnabled) {
-                // UPDATED
-                OverSeeTextField(value = pin, onValueChange = { pin = it }, label = "Enter 4-Digit PIN", visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                HorizontalDivider()
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text("Unlock with Biometrics", fontWeight = FontWeight.Bold)
-                        Text("Use Face ID or Fingerprint", fontSize = 12.sp, color = Color.Gray)
-                    }
-                    Switch(checked = isBiometricsEnabled, onCheckedChange = {
-                        isBiometricsEnabled = it
-                        AppPreferenceManager.saveBoolean(context, "biometrics_enabled", it)
-                    })
-                }
-                Button(onClick = {
-                    AppPreferenceManager.saveString(context, "saved_pin", pin)
-                    onBackClick()
-                }, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp)) { Text("Save Security Settings") }
-            }
-        }
-    }
-}
-
-// --- 6. Custom Keyword List ---
-@Composable
-fun CustomKeywordScreen(
-    onBackClick: () -> Unit,
-    initialKeywords: List<String>? = null
-) {
-    val context = LocalContext.current
-    var newWord by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    val savedKeywords = remember { AppPreferenceManager.getStringSet(context, "custom_keywords", setOf("bullying", "vape", "address")).toList() }
-    val keywords = remember { mutableStateListOf(*(initialKeywords ?: savedKeywords).toTypedArray()) }
-
-    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
-        SettingsTopBar("Custom Keywords", onBackClick)
-        Column(modifier = Modifier.padding(horizontal = AppTheme.PaddingDefault)) {
-            Text("Add words you want flagged specifically for this device.", fontSize = 13.sp, color = Color.Gray)
-            Spacer(Modifier.height(16.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                // UPDATED
-                OverSeeTextField(
-                    value = newWord, onValueChange = { newWord = it; errorMessage = null },
-                    label = "Add word", modifier = Modifier.weight(1f), isError = errorMessage != null
-                )
-                Button(
-                    onClick = {
-                        val wordToAdd = newWord.trim().lowercase()
-                        if (wordToAdd.isNotBlank()) {
-                            if (keywords.contains(wordToAdd)) {
-                                errorMessage = "This keyword already exists."
-                            } else {
-                                keywords.add(0, wordToAdd)
-                                AppPreferenceManager.saveStringSet(context, "custom_keywords", keywords.toSet())
-                                newWord = ""
-                            }
-                        }
-                    },
-                    modifier = Modifier.height(56.dp), shape = RoundedCornerShape(12.dp)
-                ) { Text("Add") }
-            }
-            if (errorMessage != null) {
-                Text(errorMessage!!, color = AppTheme.Error, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
-            }
-
-            Spacer(Modifier.height(32.dp))
-            Text("Existing Keywords", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
-            Spacer(Modifier.height(12.dp))
-
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (keywords.isEmpty()) {
-                    item { Text("No custom keywords added yet.", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(8.dp)) }
-                } else {
-                    items(keywords.size) { index ->
-                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AppTheme.Surface), border = BorderStroke(1.dp, AppTheme.Border)) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text(keywords[index], fontWeight = FontWeight.Bold)
-                                IconButton(onClick = {
-                                    keywords.removeAt(index)
-                                    AppPreferenceManager.saveStringSet(context, "custom_keywords", keywords.toSet())
-                                }) { Icon(Icons.Default.Delete, contentDescription = "Delete", tint = AppTheme.Error) }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// --- 7. Mute / Quiet Hours ---
-@Composable
-fun QuietHoursScreen(onBackClick: () -> Unit, initialEnabled: Boolean? = null) {
-    val context = LocalContext.current
-    var isEnabled by remember { mutableStateOf(initialEnabled ?: AppPreferenceManager.getBoolean(context, "quiet_hours_enabled", false)) }
-    val daysOfWeek = listOf("S", "M", "T", "W", "T", "F", "S")
-
-    val savedDaysStr = remember { AppPreferenceManager.getStringSet(context, "quiet_hours_days", setOf("1","2","3","4","5")).map { it.toInt() } }
-    val selectedDays = remember { mutableStateListOf(*savedDaysStr.toTypedArray()) }
-
-    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
-        SettingsTopBar("Quiet Hours", onBackClick)
-        Column(modifier = Modifier.padding(AppTheme.PaddingDefault), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Enable Quiet Hours", fontWeight = FontWeight.Bold)
-                    Text("Pause notifications during this schedule", fontSize = 12.sp, color = Color.Gray)
-                }
-                Switch(checked = isEnabled, onCheckedChange = {
-                    isEnabled = it
-                    AppPreferenceManager.saveBoolean(context, "quiet_hours_enabled", it)
-                })
-            }
-            if (isEnabled) {
-                Text("Applies to Days", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    daysOfWeek.forEachIndexed { index, day ->
-                        val isSelected = selectedDays.contains(index)
-                        Box(
-                            modifier = Modifier.size(40.dp).clip(CircleShape).background(if (isSelected) AppTheme.Primary else Color(0xFFE0E0E0))
-                                .clickable {
-                                    if (isSelected) selectedDays.remove(index) else selectedDays.add(index)
-                                    AppPreferenceManager.saveStringSet(context, "quiet_hours_days", selectedDays.map { it.toString() }.toSet())
-                                },
-                            contentAlignment = Alignment.Center
-                        ) { Text(day, color = if (isSelected) Color.White else Color.DarkGray, fontWeight = FontWeight.Bold) }
-                    }
-                }
-
-                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AppTheme.Surface), border = BorderStroke(1.dp, AppTheme.Border)) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("Start Time")
-                            Text("10:00 PM", fontWeight = FontWeight.Bold, color = AppTheme.Primary, modifier = Modifier.clickable { }.padding(8.dp))
-                        }
-                        HorizontalDivider()
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("End Time")
-                            Text("7:00 AM", fontWeight = FontWeight.Bold, color = AppTheme.Primary, modifier = Modifier.clickable { }.padding(8.dp))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 // --- 8. Help & Support ---
 @Composable
 fun HelpSupportScreen(onBackClick: () -> Unit) {
-    var searchQuery by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    // Loads the manual text from assets/user_manual.txt
+    val userManual = remember { context.readAssetFile("user_manual.txt") }
 
     Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
         SettingsTopBar("Help & Support", onBackClick)
-        Column(modifier = Modifier.padding(horizontal = AppTheme.PaddingDefault).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            // UPDATED: Now uses the global wrapper with the leading icon!
-            OverSeeTextField(
-                value = searchQuery, onValueChange = { searchQuery = it }, placeholder = "Search for help...",
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
-                modifier = Modifier.fillMaxWidth()
-            )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Frequently Asked Questions", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AppTheme.Primary)
-                HelpCard("How does the app sync data?", "The child device sends data automatically when a high-risk alert happens, or manually when requested via the dashboard.")
-                HelpCard("Can my child uninstall the app?", "If device administrator permissions are granted during setup, the app requires a parent PIN to uninstall.")
-                HelpCard("How do I link a second child?", "Currently, OverSee supports one active link per parent dashboard. Unlink the current device to switch.")
+        Column(
+            modifier = Modifier
+                .padding(horizontal = AppTheme.PaddingDefault)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text("User Manual", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = AppTheme.Primary)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.Surface),
+                border = BorderStroke(1.dp, AppTheme.Border)
+            ) {
+                Text(
+                    text = userManual,
+                    modifier = Modifier.padding(16.dp),
+                    fontSize = 14.sp,
+                    lineHeight = 22.sp,
+                    color = Color.DarkGray
+                )
             }
 
-            HorizontalDivider()
-
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Still need help?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Surface, contentColor = Color.Black), border = BorderStroke(1.dp, AppTheme.Border)) {
-                    Icon(Icons.Outlined.Chat, contentDescription = "Chat", tint = AppTheme.Primary)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Live Chat Support")
-                }
-                Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Surface, contentColor = Color.Black), border = BorderStroke(1.dp, AppTheme.Border)) {
-                    Icon(Icons.Outlined.Email, contentDescription = "Email", tint = AppTheme.Primary)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Email Support Team")
-                }
+            // Add a contact button at the bottom since we removed FAQ
+            Button(
+                onClick = { /* Intent to email support */ },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary)
+            ) {
+                Icon(Icons.Default.Email, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Contact Support")
             }
-            Spacer(Modifier.height(24.dp))
+
+            Spacer(Modifier.height(40.dp))
         }
     }
 }

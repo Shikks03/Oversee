@@ -1,0 +1,19 @@
+Data Agreement and Privacy Notice
+
+Data Collection
+OverSee collects limited device data such as screen telemetry, accessibility events, and application usage information strictly for parental monitoring purposes. Screen content is processed locally on the device using Optical Character Recognition (OCR), and only extracted text relevant to detection is analyzed. No unnecessary or unrelated personal data is collected. All collected data is protected through end-to-end encryption to ensure confidentiality during storage and transmission.
+
+Privacy and Security
+We are committed to protecting user privacy. OverSee does not sell, rent, or share any user or child data with third-party advertisers or external entities. All relevant monitoring data is securely stored using trusted cloud services such as Google Firebase and is accessible only to the authorized and linked Parent or Guardian account. Sensitive data is minimized, and no raw screenshots are retained after processing to reduce privacy risks.
+
+Device Permissions
+To function correctly, the child device requires specific permissions, including Accessibility Services, Screen Overlay, and Screen Capture. These permissions enable the system to monitor on-screen content and detect inappropriate language in real time. All permissions are requested with user consent and are used solely for the intended functionality of the application. Any attempt to misuse or manipulate these permissions to bypass system safeguards is strictly prohibited.
+
+Data Usage and Retention
+Collected data is used exclusively for monitoring, analysis, and reporting within the application. Logs and summarized data are retained only for as long as necessary to provide meaningful insights to the parent or guardian. Users have full control over their data and may review monitoring summaries through the Parent Dashboard.
+
+Account Control and Termination
+Users may delete their account and all associated child data at any time through the Parent Dashboard settings. Upon account deletion, all stored logs, summaries, and associated data are permanently removed from the system and cannot be recovered.
+
+User Consent
+By proceeding, you acknowledge that you have read and understood this Data Agreement and Privacy Notice. You agree to the collection and use of data as described above and confirm that the application will be used responsibly for its intended purpose of parental monitoring.

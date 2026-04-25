@@ -24,14 +24,10 @@ fun SettingsScreen(
     onLogoutClick: () -> Unit,
     onDebugResetRole: () -> Unit,
     onSyncHistoryClick: () -> Unit,
-    // --- NEW ROUTING CALLBACKS ---
     onEditProfileClick: () -> Unit,
     onChangePasswordClick: () -> Unit,
     onExportDataClick: () -> Unit,
     onDeleteAccountClick: () -> Unit,
-    onPinLockClick: () -> Unit,
-    onKeywordListClick: () -> Unit,
-    onQuietHoursClick: () -> Unit,
     onHelpSupportClick: () -> Unit
 ) {
     // State for the Unlink Dialog Pop-up
@@ -59,11 +55,11 @@ fun SettingsScreen(
         }
 
         // 3. Security & Control
-        SettingsGroup("Security & Control") {
-            SettingsItem(Icons.Default.Lock, "PIN / Biometric Lock", "Require FaceID or PIN to open app", onClick = onPinLockClick)
-            SettingsItem(Icons.Default.FormatListBulleted, "Custom Keyword List", "Add specific words you want flagged", onClick = onKeywordListClick)
-            SettingsItem(Icons.Default.NotificationsOff, "Mute / Quiet Hours", "Pause notifications during specific times", onClick = onQuietHoursClick)
-        }
+//        SettingsGroup("Security & Control") {
+//            SettingsItem(Icons.Default.Lock, "PIN / Biometric Lock", "Require FaceID or PIN to open app", onClick = onPinLockClick)
+//            SettingsItem(Icons.Default.FormatListBulleted, "Custom Keyword List", "Add specific words you want flagged", onClick = onKeywordListClick)
+//            SettingsItem(Icons.Default.NotificationsOff, "Mute / Quiet Hours", "Pause notifications during specific times", onClick = onQuietHoursClick)
+//        }
 
         // 4. Support & Legal
         SettingsGroup("Support & Legal") {

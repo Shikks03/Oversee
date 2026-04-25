@@ -4,7 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.*
@@ -23,6 +25,7 @@ import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.ui.components.dialogs.OverSeeDialog
 import com.example.oversee.ui.components.inputs.OverSeeTextField
 import com.example.oversee.ui.theme.AppTheme
+import com.example.oversee.utils.readAssetFile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +34,7 @@ fun ChildSettingsDialog(
     onDismiss: () -> Unit, onChangePin: () -> Unit, onEditId: (String) -> Unit,
     onExitApp: () -> Unit, onDebugResetRole: () -> Unit
 ) {
+    var showManual by remember { mutableStateOf(false) }
     var showSyncHistory by remember { mutableStateOf(false) }
     var showActivityConsole by remember { mutableStateOf(false) }
     var showEditId by remember { mutableStateOf(false) }
@@ -106,6 +110,19 @@ fun ChildSettingsDialog(
                     }
                 }
 
+                // --- NEW SUPPORT SECTION ---
+                item { Text("Support", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.ChildAccent, modifier = Modifier.padding(start = 8.dp)) }
+                item {
+                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        SettingsRow(
+                            icon = Icons.Rounded.MenuBook,
+                            title = "View User Manual",
+                            subtitle = "Read the full safety guide",
+                            onClick = { showManual = true }
+                        )
+                    }
+                }
+
                 item { Spacer(Modifier.height(8.dp)) }
 
                 // --- DEBUG & ADVANCED ---
@@ -129,6 +146,22 @@ fun ChildSettingsDialog(
     if (showSyncHistory) SyncHistoryDialog(consoleLogs, onDismiss = { showSyncHistory = false })
     if (showActivityConsole) ActivityConsoleDialog(consoleLogs, onDismiss = { showActivityConsole = false })
     if (showEditId) EditDeviceIdDialog(deviceId, onDismiss = { showEditId = false }, onConfirm = { onEditId(it); showEditId = false })
+    // The actual Manual Dialog triggered from the row above
+    if (showManual) {
+        val context = LocalContext.current
+        val manualText = remember { context.readAssetFile("user_manual.txt") }
+
+        OverSeeDialog(
+            title = "User Manual",
+            confirmText = "Close",
+            onConfirm = { showManual = false },
+            onDismiss = { showManual = false }
+        ) {
+            Box(modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                Text(manualText, fontSize = 13.sp, lineHeight = 20.sp, color = Color.DarkGray)
+            }
+        }
+    }
 }
 
 @Composable

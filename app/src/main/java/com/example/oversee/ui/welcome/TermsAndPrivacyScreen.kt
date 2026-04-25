@@ -12,13 +12,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oversee.ui.theme.AppTheme
+import com.example.oversee.utils.readAssetFile
 
 @Composable
 fun TermsAndPrivacyScreen(onAccept: () -> Unit) {
+    val context = LocalContext.current
+    val termsContent = remember { context.readAssetFile("terms_conditions.txt") }
     var isChecked by remember { mutableStateOf(false) }
 
     Column(
@@ -44,21 +48,13 @@ fun TermsAndPrivacyScreen(onAccept: () -> Unit) {
             shape = RoundedCornerShape(16.dp),
             color = Color(0xFFF8FAFC) // Light Slate Background
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState())
-            ) {
-                Text("1. Data Collection", fontWeight = FontWeight.Bold, color = Color.Black)
-                Text("OverSee collects screen telemetry, accessibility events, and app usage data strictly for parental monitoring purposes. This data is end-to-end encrypted.", fontSize = 14.sp, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp), lineHeight = 20.sp)
-
-                Text("2. Privacy & Security", fontWeight = FontWeight.Bold, color = Color.Black)
-                Text("We do not sell, rent, or share your child's data with third-party advertisers. Data is stored securely on Google Firebase and is only accessible by the linked Parent Account.", fontSize = 14.sp, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp), lineHeight = 20.sp)
-
-                Text("3. Device Permissions", fontWeight = FontWeight.Bold, color = Color.Black)
-                Text("The child device requires Accessibility, Screen Overlay, and Screen Capture permissions to function. Misuse of these permissions to bypass system security is strictly prohibited.", fontSize = 14.sp, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp), lineHeight = 20.sp)
-
-                Text("4. Account Termination", fontWeight = FontWeight.Bold, color = Color.Black)
-                Text("You may delete your account and all associated child data at any time through the Parent Dashboard settings. Upon deletion, all logs are permanently wiped from our servers.", fontSize = 14.sp, color = Color.DarkGray, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp), lineHeight = 20.sp)
-            }
+            Text(
+                text = termsContent,
+                modifier = Modifier.padding(20.dp).verticalScroll(rememberScrollState()),
+                fontSize = 14.sp,
+                color = Color.DarkGray,
+                lineHeight = 20.sp
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))

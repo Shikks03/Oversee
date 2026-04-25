@@ -90,27 +90,24 @@ fun ParentDashboardScreen(
                     refreshing = refreshing, onRefresh = onRefresh, onDebugResetRole = onDebugResetRole
                 )
                 3 -> SettingsScreen(
-                    onLogoutClick = { showLogoutDialog = true }, onDebugResetRole = onDebugResetRole, onSyncHistoryClick = { currentTab = 6 },
-                    onEditProfileClick = { currentTab = 7 }, onChangePasswordClick = { currentTab = 8 },
-                    onExportDataClick = { currentTab = 9 }, onDeleteAccountClick = { currentTab = 10 },
-                    onPinLockClick = { currentTab = 11 }, onKeywordListClick = { currentTab = 12 },
-                    onQuietHoursClick = { currentTab = 13 }, onHelpSupportClick = { currentTab = 14 }
+                    onLogoutClick = { showLogoutDialog = true },
+                    onDebugResetRole = onDebugResetRole,
+                    onSyncHistoryClick = { currentTab = 6 },
+                    onEditProfileClick = { currentTab = 7 },
+                    onChangePasswordClick = { currentTab = 8 },
+                    onExportDataClick = { currentTab = 9 },
+                    onDeleteAccountClick = { currentTab = 10 },
+                    onHelpSupportClick = { currentTab = 14 }
                 )
-                5 -> NotificationsScreen(incidents = incidents, onBackClick = { currentTab = 0 }, onNotificationClick = { clickedIncident ->
-                    val cal = Calendar.getInstance().apply { timeInMillis = clickedIncident.timestamp }
-                    cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0); cal.set(Calendar.SECOND, 0); sharedStartDate = cal.timeInMillis
-                    cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59); cal.set(Calendar.SECOND, 59); sharedEndDate = cal.timeInMillis
-                    currentTab = 2
-                })
                 // Settings Sub-Routes
                 6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefresh)
                 7 -> EditProfileScreen(onBackClick = { currentTab = 3 })
                 8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
                 9 -> ExportDataScreen(onBackClick = { currentTab = 3 })
                 10 -> DeleteAccountScreen(onBackClick = { currentTab = 3 })
-                11 -> PinLockScreen(onBackClick = { currentTab = 3 })
-                12 -> CustomKeywordScreen(onBackClick = { currentTab = 3 })
-                13 -> QuietHoursScreen(onBackClick = { currentTab = 3 })
+//                11 -> PinLockScreen(onBackClick = { currentTab = 3 })
+//                12 -> CustomKeywordScreen(onBackClick = { currentTab = 3 })
+//                13 -> QuietHoursScreen(onBackClick = { currentTab = 3 })
                 14 -> HelpSupportScreen(onBackClick = { currentTab = 3 })
             }
         }
