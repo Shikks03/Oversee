@@ -57,13 +57,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     var parentName by remember { mutableStateOf(UserRepository.getLocalName(context).ifBlank { "Unknown Parent" }) }
     var parentId by remember { mutableStateOf(AuthRepository.getUserId() ?: "---") }
-    val syncPrefs = remember { context.getSharedPreferences("SyncPrefs", Context.MODE_PRIVATE) }
-    var lastSyncTimestamp by remember { mutableLongStateOf(syncPrefs.getLong("last_sync_time", 0L)) }
-
-    val lastSyncedTime = remember(lastSyncTimestamp) {
-        if (lastSyncTimestamp == 0L) "Never"
-        else "Today, " + SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(lastSyncTimestamp))
-    }
+    var lastSyncedTime by remember { mutableStateOf(AppPreferenceManager.getString(context, "last_synced", "Never")) }
 
     var isReady by remember { mutableStateOf(false) }
     var isDeviceLinked by remember { mutableStateOf(UserRepository.getLocalTargetId(context) != "NOT_LINKED") }
@@ -97,15 +91,20 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         isReady = (healthStates["Accessibility"] == true && healthStates["Overlay"] == true) || debugSkipPermissions
     }
 
-    // FIXED: Explicitly declared as () -> Unit to satisfy Compose Button requirements
     val triggerSync: () -> Unit = {
         isRefreshing = true
         addToConsole("Sync Event: Manual cloud synchronization triggered.")
-
-        FirebaseSyncManager.syncPendingLogs(context) { _, _ ->
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                isRefreshing = false
-                addToConsole("Sync Event: Complete.")
+        FirebaseSyncManager.syncPendingLogs(context) { uploaded, error ->
+            isRefreshing = false
+            val time = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+            lastSyncedTime = "Today, $time"
+            AppPreferenceManager.saveString(context, "last_synced", lastSyncedTime)
+            if (error != null) {
+                addToConsole("Sync Event: Failed — $error")
+            } else if (uploaded == 0) {
+                addToConsole("Sync Event: Already up to date.")
+            } else {
+                addToConsole("Sync Event: Complete. $uploaded incident(s) uploaded.")
             }
         }
     }
@@ -145,18 +144,6 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         }
         ContextCompat.registerReceiver(context, receiver, IntentFilter("com.example.oversee.CONSOLE_UPDATE"), ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
-    }
-
-    DisposableEffect(syncPrefs) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-            if (key == "last_sync_time") {
-                lastSyncTimestamp = prefs.getLong(key, 0L)
-            }
-        }
-        syncPrefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose {
-            syncPrefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
     }
 
     val onExitApp = {
