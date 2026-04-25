@@ -29,8 +29,6 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.*
 import androidx.savedstate.*
-import androidx.core.graphics.scale
-
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -45,7 +43,6 @@ import com.example.oversee.domain.ToxicityScorer
 import com.example.oversee.utils.sendConsoleUpdate
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
 import java.io.FileWriter
 import java.nio.ByteBuffer
@@ -69,8 +66,6 @@ class ScreenCaptureService : Service() {
     private val attemptCount = AtomicInteger(0)
     private val successCaptureCount = AtomicInteger(0)
     private val ocrFinishedCount = AtomicInteger(0)
-//    private var tess: TessBaseAPI? = null
-//    private var tessBaseline: TessBaseAPI? = null
 
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private lateinit var textAnalysisEngine: TextAnalysisEngine
@@ -134,18 +129,6 @@ class ScreenCaptureService : Service() {
 
         return START_STICKY
     }
-
-//    private fun prepareTesseract() {
-//        val tessDir = File(filesDir, "tessdata")
-//        if (!tessDir.exists()) tessDir.mkdirs()
-//        val jsonData = File(tessDir, "eng.traineddata")
-//        if (!jsonData.exists()) {
-//            assets.open("tessdata/eng.traineddata").use { input ->
-//                jsonData.outputStream().use { output -> input.copyTo(output) }
-//                Log.d("OCR", "prepareTesseract DONE")
-//            }
-//        }
-//    }
 
     // --- CAPTURE LOOP ---
     private val captureRunnable = object : Runnable {
