@@ -189,50 +189,54 @@ class ScreenCaptureService : Service() {
             val startTime = System.currentTimeMillis()
             val debugMode = AppPreferenceManager.getBoolean(applicationContext, "ocr_debug", false)
 
+            Log.d("OCR_TRACE", "[$id] --- Pipeline Started --- | Source: ${bitmap.width}x${bitmap.height}")
+
             // Step 6 (A1): crop status-bar and nav-bar strips
+            val cropStart = System.currentTimeMillis()
             val cropped = if (topInset + bottomInset > 0) {
                 val cropHeight = bitmap.height - topInset - bottomInset
                 if (cropHeight > 0)
                     Bitmap.createBitmap(bitmap, 0, topInset, bitmap.width, cropHeight)
                 else bitmap
             } else bitmap
-
-            // Step 4 (A4+A5): bilinear scale only on high-res displays
-            val scaled = if (cropped.width >= 1080)
-                cropped.scale(cropped.width / 2, cropped.height / 2, true)
-            else cropped
+            Log.d("OCR_TRACE", "[$id] Crop: ${System.currentTimeMillis() - cropStart}ms | New Size: ${cropped.width}x${cropped.height}")
 
             if (debugMode) {
-                runAbTest(bitmap, scaled, api, id, startTime)
-                if (scaled !== cropped) scaled.recycle()
+                runAbTest(bitmap, cropped, api, id, startTime)
                 if (cropped !== bitmap) cropped.recycle()
                 return
             }
 
             // Step 10 (A2): pHash frame-diff gate — skip if frame looks identical
-            val hash = OcrPreprocessor.perceptualHash(scaled)
-            if (lastHash != null && java.lang.Long.bitCount(hash xor lastHash!!) < 5) {
-                if (scaled !== cropped) scaled.recycle()
+            val hashStart = System.currentTimeMillis()
+            val hash = OcrPreprocessor.perceptualHash(cropped)
+            val hashDiff = if (lastHash != null) java.lang.Long.bitCount(hash xor lastHash!!) else -1
+            Log.d("OCR_TRACE", "[$id] pHash: ${System.currentTimeMillis() - hashStart}ms | Diff from last: $hashDiff bits")
+
+            if (lastHash != null && hashDiff < 5) {
                 if (cropped !== bitmap) cropped.recycle()
-                Log.d(TAG, "pHash gate: duplicate frame #$id skipped")
+                Log.d("OCR_TRACE", "[$id] ABORT: Duplicate frame skipped (hash gate)")
                 return
             }
             lastHash = hash
 
             // Step 9 (B1): Otsu binarisation (skipped automatically on photo-backed posts)
-            val processed = OcrPreprocessor.applyOtsu(scaled)
+            val otsuStart = System.currentTimeMillis()
+            val processed = OcrPreprocessor.applyOtsu(cropped)
+            Log.d("OCR_TRACE", "[$id] Otsu: ${System.currentTimeMillis() - otsuStart}ms")
 
             // Feed grayscale bytes directly — 1 byte/pixel, 1/4 the RGBA upload size
+            val tessStart = System.currentTimeMillis()
             val bytes = OcrPreprocessor.extractBytes(processed)
             api.setImage(bytes, processed.width, processed.height, 1, processed.width)
             val text = api.utF8Text
+            Log.d("OCR_TRACE", "[$id] Tesseract: ${System.currentTimeMillis() - tessStart}ms | Chars found: ${text?.length ?: 0}")
 
-            if (processed !== scaled) processed.recycle()
-            if (scaled !== cropped) scaled.recycle()
+            if (processed !== cropped) processed.recycle()
             if (cropped !== bitmap) cropped.recycle()
 
             val duration = System.currentTimeMillis() - startTime
-            Log.d(TAG, "OCR #$id (${duration}ms)")
+            Log.d("OCR_TRACE", "[$id] --- Pipeline Complete --- | Total: ${duration}ms")
 
             if (!text.isNullOrBlank()) {
                 val analysisResult = textAnalysisEngine.analyze(text)
@@ -250,20 +254,20 @@ class ScreenCaptureService : Service() {
                                 Incident(
                                     rawWord = scored.rawToken,
                                     matchedWord = scored.matchedWord,
-                                    severity = severity, // Use mapSeverity(scored.severity) for the A/B test block
+                                    severity = severity,
                                     appName = "Facebook"
                                 )
                             )
-                            Log.d(TAG, "🚨 FLAG CAUGHT: OCR Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
+                            Log.d("OCR_TRACE", "[$id] 🚨 FLAG CAUGHT: Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
                             sendConsoleUpdate("🚨 FLAG CAUGHT: OCR Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
                         } else {
-                            Log.d(TAG, "Debounced ${scored.matchedWord}")
+                            Log.d("OCR_TRACE", "[$id] Debounced matched word: ${scored.matchedWord}")
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "OCR Processing Error", e)
+            Log.e("OCR_TRACE", "[$id] OCR Processing Error", e)
             sendConsoleUpdate("Error: OCR Failed - ${e.message}")
         }
     }
@@ -271,29 +275,27 @@ class ScreenCaptureService : Service() {
     // A/B harness: runs baseline (no crop, no Otsu, default Tesseract) and candidate
     // (full pipeline) on the same ALPHA_8 source; logs token diff to ocr_ab.log.
     // Only baseline's incident saves persist — candidate output is metric-only.
-    private fun runAbTest(sourceBitmap: Bitmap, candidateScaled: Bitmap, api: TessBaseAPI, id: Int, startTime: Long) {
+    private fun runAbTest(sourceBitmap: Bitmap, candidateBitmap: Bitmap, api: TessBaseAPI, id: Int, startTime: Long) {
         try {
             val bl = tessBaseline ?: TessBaseAPI().apply {
                 init(filesDir.absolutePath, "eng")
             }.also { tessBaseline = it }
 
-            // Pipeline A: nearest-neighbor 50% scale, no Otsu, default Tesseract config
-            val scaledA = sourceBitmap.scale(sourceBitmap.width / 2, sourceBitmap.height / 2, false)
-            val bytesA = OcrPreprocessor.extractBytes(scaledA)
+            // Pipeline A: no scale, no Otsu, default Tesseract config
+            val bytesA = OcrPreprocessor.extractBytes(sourceBitmap)
             val timeAStart = System.nanoTime()
-            bl.setImage(bytesA, scaledA.width, scaledA.height, 1, scaledA.width)
+            bl.setImage(bytesA, sourceBitmap.width, sourceBitmap.height, 1, sourceBitmap.width)
             val textA = bl.utF8Text ?: ""
             val latA = System.nanoTime() - timeAStart
-            scaledA.recycle()
 
-            // Pipeline B: Otsu on already-cropped+scaled bitmap, optimised Tesseract config
-            val processedB = OcrPreprocessor.applyOtsu(candidateScaled)
+            // Pipeline B: Otsu on already-cropped bitmap, optimised Tesseract config
+            val processedB = OcrPreprocessor.applyOtsu(candidateBitmap)
             val bytesB = OcrPreprocessor.extractBytes(processedB)
             val timeBStart = System.nanoTime()
             api.setImage(bytesB, processedB.width, processedB.height, 1, processedB.width)
             val textB = api.utF8Text ?: ""
             val latB = System.nanoTime() - timeBStart
-            if (processedB !== candidateScaled) processedB.recycle()
+            if (processedB !== candidateBitmap) processedB.recycle()
 
             // Token-set diff (ground-truth metric: matched flagged words)
             val tA = textA.split(Regex("\\s+")).filter { it.length > 2 }.toSet()
