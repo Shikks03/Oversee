@@ -8,7 +8,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -115,7 +117,7 @@ fun ChildSettingsDialog(
                 item {
                     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                         SettingsRow(
-                            icon = Icons.Rounded.MenuBook,
+                            icon = Icons.AutoMirrored.Rounded.MenuBook,
                             title = "View User Manual",
                             subtitle = "Read the full safety guide",
                             onClick = { showManual = true }
@@ -209,7 +211,7 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
             topBar = {
                 TopAppBar(
                     title = { Text("Penalty & Thresholds", fontWeight = FontWeight.Bold) },
-                    navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Rounded.ArrowBack, null) } },
+                    navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null) } },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
                 )
             },

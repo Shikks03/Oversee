@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Email
@@ -39,7 +40,7 @@ fun SettingsTopBar(title: String, onBackClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onBackClick) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
+        IconButton(onClick = onBackClick) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
         Spacer(Modifier.width(8.dp))
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.Black)
     }

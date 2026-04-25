@@ -163,19 +163,18 @@ object KeyManager {
 
     fun uploadKeyToFirestore(deviceId: String, key: SecretKey, onComplete: (Boolean) -> Unit = {}) {
         val kek = sessionKek
-        if (kek == null) {
-            Log.e(TAG, "Cannot upload key: User KEK is missing from memory!")
-            onComplete(false)
-            return
+        val storedValue = if (kek != null) {
+            CryptoManager.wrapChaChaKeyForCloud(key, kek)
+        } else {
+            // KEK not available — store raw key (legacy fallback)
+            Log.w(TAG, "KEK unavailable, uploading raw key for deviceId=$deviceId")
+            Base64.encodeToString(key.encoded, Base64.NO_WRAP)
         }
-
-        // --- NEW: Wrap the key before upload ---
-        val safeEncryptedKey = CryptoManager.wrapChaChaKeyForCloud(key, kek)
 
         FirebaseFirestore.getInstance()
             .collection(COLLECTION_SESSIONS)
             .document(deviceId)
-            .set(mapOf(FIELD_KEY to safeEncryptedKey), com.google.firebase.firestore.SetOptions.merge())
+            .set(mapOf(FIELD_KEY to storedValue), com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Failed to upload key", e)
@@ -184,13 +183,6 @@ object KeyManager {
     }
 
     fun fetchKeyFromFirestore(deviceId: String, onResult: (SecretKey?) -> Unit) {
-        val kek = sessionKek
-        if (kek == null) {
-            Log.e(TAG, "Cannot fetch key: User KEK is missing from memory!")
-            onResult(null)
-            return
-        }
-
         FirebaseFirestore.getInstance()
             .collection(COLLECTION_SESSIONS)
             .document(deviceId)
@@ -198,13 +190,28 @@ object KeyManager {
             .addOnSuccessListener { doc ->
                 val encoded = doc.getString(FIELD_KEY)
                 if (encoded != null) {
-                    try {
-                        // --- NEW: Unwrap the downloaded key ---
-                        onResult(CryptoManager.unwrapChaChaKeyFromCloud(encoded, kek))
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to decode remote key (Password might have changed)", e)
-                        onResult(null)
+                    val kek = sessionKek
+                    if (kek != null) {
+                        try {
+                            onResult(CryptoManager.unwrapChaChaKeyFromCloud(encoded, kek))
+                            return@addOnSuccessListener
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Wrapped key decode failed, trying raw fallback", e)
+                        }
                     }
+                    // Fallback: try reading as raw base64 ChaCha20 key (legacy / no-KEK path)
+                    try {
+                        val bytes = Base64.decode(encoded, Base64.NO_WRAP)
+                        if (bytes.size == 32) {
+                            Log.w(TAG, "Loaded legacy raw key for deviceId=$deviceId")
+                            onResult(CryptoManager.keyFromBytes(bytes))
+                            return@addOnSuccessListener
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Raw key fallback also failed", e)
+                    }
+                    Log.e(TAG, "Cannot decode key for deviceId=$deviceId")
+                    onResult(null)
                 } else {
                     onResult(null)
                 }

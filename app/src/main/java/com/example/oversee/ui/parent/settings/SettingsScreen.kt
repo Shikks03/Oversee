@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,7 +41,7 @@ fun SettingsScreen(
         // 1. Account
         SettingsGroup("Account") {
             SettingsItem(Icons.Default.Person, "Edit Profile", "Change your name or email", onClick = onEditProfileClick)
-            SettingsItem(Icons.Default.ExitToApp, "Log Out", "Sign out of your parent account", isDestructive = true, onClick = onLogoutClick)
+            SettingsItem(Icons.AutoMirrored.Filled.ExitToApp, "Log Out", "Sign out of your parent account", isDestructive = true, onClick = onLogoutClick)
         }
 
         // 2. Device Management

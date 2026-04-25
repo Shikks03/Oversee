@@ -33,6 +33,7 @@ object FirebaseIncidentManager {
                     // 1. Loop through the downloaded buckets (e.g., April, March, February)
                     for (doc in documents) {
                         // Extract the big array from the bucket
+                        @Suppress("UNCHECKED_CAST")
                         val logsArray = doc.get("logsArray") as? List<Map<String, Any>> ?: continue
 
                         // 2. Loop through the individual logs inside the array
