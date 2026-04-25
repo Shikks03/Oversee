@@ -62,9 +62,6 @@ dependencies {
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-installations")
 
-    // Tesseract OCR
-    implementation("com.rmtheis:tess-two:9.1.0")
-
     //Security Crypto
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
