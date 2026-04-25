@@ -89,6 +89,18 @@ class TextAnalysisEngine private constructor(
             val norm = normalizeToken(raw)
             if (norm.text.length <= 2) continue   // short-token filter: keep only length > 2
 
+            // Cross-language collision filter — skip benign function words before fuzzy matching.
+            // android.util.Log is wrapped in runCatching so JVM unit tests don't crash on the
+            // "Method not mocked" path (no Robolectric in this project).
+            if (WordFilterLists.isCollisionFilterWord(norm.text)) {
+                runCatching {
+                    android.util.Log.d("TextAnalysisEngine", "Skipped by collision filter: ${norm.text}")
+                }
+                continue
+            }
+            // Pronouns are kept in rawTokens (scorer reads them for proximity) but never flagged.
+            if (WordFilterLists.isPersonTargetingPronoun(norm.text)) continue
+
             val hasObfuscationSignal = norm.hasRepetition || norm.wasLeetApplied
             var bestMatch: DetectedWord? = null
 
