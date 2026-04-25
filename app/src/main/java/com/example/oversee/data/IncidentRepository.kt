@@ -20,17 +20,19 @@ object IncidentRepository {
     fun saveIncident(context: Context, incident: Incident) {
         LocalStorageManager.logIncident(context, incident.rawWord, incident.matchedWord, incident.severity, incident.appName)
 
-        if (incident.severity == "HIGH") {
-            Log.d(TAG, "🚨 High-Risk Incident Logged! Initiating Emergency Cloud Sync...")
-
-            // FIX: Use the callback to wait for the sync to finish BEFORE notifying the parent
-            FirebaseSyncManager.syncPendingLogs(context) { uploadedCount, error ->
-                if (error == null && uploadedCount > 0) {
-                    Log.d(TAG, "🚨 Sync finished. Now Pushing Emergency Alert Notification to Parent Device...")
-                    FcmAlertManager.sendHighSeverityAlert(context)
-                } else if (error != null) {
-                    Log.e(TAG, "🚨 Cloud Sync failed, skipping parent notification: $error")
+        if (incident.severity == "HIGH" || incident.severity == "MEDIUM") {
+            if (incident.severity == "HIGH") {
+                Log.d(TAG, "🚨 High-Risk Incident Logged! Initiating Emergency Cloud Sync...")
+                FirebaseSyncManager.syncPendingLogs(context) { uploadedCount, error ->
+                    if (error == null && uploadedCount > 0) {
+                        Log.d(TAG, "🚨 Sync finished. Now Pushing Emergency Alert Notification to Parent Device...")
+                        FcmAlertManager.sendHighSeverityAlert(context)
+                    } else if (error != null) {
+                        Log.e(TAG, "🚨 Cloud Sync failed, skipping parent notification: $error")
+                    }
                 }
+            } else {
+                FirebaseSyncManager.syncPendingLogs(context)
             }
         }
     }

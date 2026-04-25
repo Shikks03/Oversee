@@ -58,6 +58,7 @@ class TextAnalysisEngine private constructor(
     // ─────────────────────────────────────────────────────────────
 
     data class DetectedWord(
+        val originalText: String,        // NEW: The exact text from the screen (e.g., "T@ng1n@")
         val rawToken: String,            // the normalized token (lowercased, cleaned)
         val matchedWord: String,         // the reference word it matched
         val originalText: String,
@@ -89,6 +90,18 @@ class TextAnalysisEngine private constructor(
             val norm = normalizeToken(raw)
             if (norm.text.length <= 2) continue   // short-token filter: keep only length > 2
 
+            // Cross-language collision filter — skip benign function words before fuzzy matching.
+            // android.util.Log is wrapped in runCatching so JVM unit tests don't crash on the
+            // "Method not mocked" path (no Robolectric in this project).
+            if (WordFilterLists.isCollisionFilterWord(norm.text)) {
+                runCatching {
+                    android.util.Log.d("TextAnalysisEngine", "Skipped by collision filter: ${norm.text}")
+                }
+                continue
+            }
+            // Pronouns are kept in rawTokens (scorer reads them for proximity) but never flagged.
+            if (WordFilterLists.isPersonTargetingPronoun(norm.text)) continue
+
             val hasObfuscationSignal = norm.hasRepetition || norm.wasLeetApplied
             var bestMatch: DetectedWord? = null
 
@@ -99,6 +112,7 @@ class TextAnalysisEngine private constructor(
                 if (isFuzzyMatch(norm.text, refWord, dist, hasObfuscationSignal)) {
                     if (bestMatch == null || sim > bestMatch.similarityScore) {
                         bestMatch = DetectedWord(
+                            originalText = raw,
                             rawToken = norm.text,
                             matchedWord = refWord,
                             originalText = raw,
@@ -137,6 +151,7 @@ class TextAnalysisEngine private constructor(
                 if (isFuzzyMatch(concat, refConcat, dist, obf)) {
                     phraseDetections.add(
                         DetectedWord(
+                            originalText = "${rawTokens[i]} ${rawTokens[i + 1]}", // <--- PASS ORIGINAL PHRASE
                             rawToken = concat,
                             matchedWord = refParts.joinToString(" "),
                             originalText = "${rawTokens[i]} ${rawTokens[i + 1]}",
@@ -171,6 +186,7 @@ class TextAnalysisEngine private constructor(
                 if (isFuzzyMatch(concat, refWord, dist, obf)) {
                     phraseDetections.add(
                         DetectedWord(
+                            originalText = "${rawTokens[i]} ${rawTokens[i + 1]}", // <--- PASS ORIGINAL PHRASE
                             rawToken = concat,
                             matchedWord = refWord,
                             originalText = "${rawTokens[i]} ${rawTokens[i + 1]}",

@@ -23,22 +23,20 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.ui.components.dialogs.OverSeeDialog
-import com.example.oversee.ui.components.inputs.OverSeeTextField
 import com.example.oversee.ui.theme.AppTheme
 import com.example.oversee.utils.readAssetFile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChildSettingsDialog(
-    deviceId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
-    onDismiss: () -> Unit, onChangePin: () -> Unit, onEditId: (String) -> Unit,
+    deviceId: String, accountId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
+    onDismiss: () -> Unit, onChangePin: () -> Unit,
     onExitApp: () -> Unit, onDebugResetRole: () -> Unit
 ) {
     var showManual by remember { mutableStateOf(false) }
     var showSyncHistory by remember { mutableStateOf(false) }
     var showActivityConsole by remember { mutableStateOf(false) }
-    var showEditId by remember { mutableStateOf(false) }
-    var showMonitoringRules by remember { mutableStateOf(false) } // NEW STATE
+    var showMonitoringRules by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
@@ -59,6 +57,8 @@ fun ChildSettingsDialog(
                     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                         Column {
                             SettingsRow(icon = Icons.Rounded.Smartphone, title = "This Device ID", subtitle = deviceId, onClick = null)
+                            HorizontalDivider(color = AppTheme.ChildBackground)
+                            SettingsRow(icon = Icons.Rounded.Tag, title = "Account ID", subtitle = accountId, onClick = null)
                             HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.Rounded.Person, title = "Connected Parent", subtitle = parentName, onClick = null)
                             HorizontalDivider(color = AppTheme.ChildBackground)
@@ -130,8 +130,6 @@ fun ChildSettingsDialog(
                 item {
                     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                         Column {
-                            SettingsRow(icon = Icons.Rounded.Edit, title = "Edit Local Device ID", onClick = { showEditId = true })
-                            HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.Rounded.Terminal, title = "View Activity Console", onClick = { showActivityConsole = true })
                             HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.Rounded.Refresh, title = "Reset Role (Keep ID)", onClick = onDebugResetRole, isDestructive = true)
@@ -145,8 +143,6 @@ fun ChildSettingsDialog(
     if (showMonitoringRules) MonitoringRulesDialog(onDismiss = { showMonitoringRules = false })
     if (showSyncHistory) SyncHistoryDialog(consoleLogs, onDismiss = { showSyncHistory = false })
     if (showActivityConsole) ActivityConsoleDialog(consoleLogs, onDismiss = { showActivityConsole = false })
-    if (showEditId) EditDeviceIdDialog(deviceId, onDismiss = { showEditId = false }, onConfirm = { onEditId(it); showEditId = false })
-    // The actual Manual Dialog triggered from the row above
     if (showManual) {
         val context = LocalContext.current
         val manualText = remember { context.readAssetFile("user_manual.txt") }
@@ -335,10 +331,3 @@ fun ActivityConsoleDialog(consoleLogs: List<String>, onDismiss: () -> Unit) {
     }
 }
 
-@Composable
-fun EditDeviceIdDialog(currentId: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember { mutableStateOf(currentId) }
-    OverSeeDialog(title = "Edit Device ID", confirmText = "Save", onConfirm = { onConfirm(text) }, onDismiss = onDismiss) {
-        OverSeeTextField(value = text, onValueChange = { text = it }, label = "Device ID", modifier = Modifier.fillMaxWidth())
-    }
-}

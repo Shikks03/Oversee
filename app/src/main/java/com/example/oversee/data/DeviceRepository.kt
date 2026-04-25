@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.remote.FirebaseInstallationsManager
+import com.example.oversee.data.remote.FirebaseUserManager
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -15,6 +16,34 @@ object DeviceRepository {
 
     fun getFid(onResult: (String?) -> Unit) {
         FirebaseInstallationsManager.getId(onResult)
+    }
+
+    /**
+     * Deterministic 6-digit display code derived from a FID. UI-only label —
+     * the FID remains the canonical identifier in Firestore and encryption.
+     * Same FID always maps to the same code; collisions are visual noise only.
+     */
+    fun toDisplayCode(fid: String?): String {
+        if (fid.isNullOrBlank()) return ""
+        return "%06d".format(Math.floorMod(fid.hashCode(), 1_000_000))
+    }
+
+    fun getOrCreateDisplayUid(uid: String, onComplete: (String) -> Unit) {
+        FirebaseUserManager.fetchProfile(uid) { profile ->
+            val existing = profile?.get("child_display_uid") as? String
+            if (!existing.isNullOrBlank()) {
+                onComplete(existing)
+                return@fetchProfile
+            }
+            tryReserveDisplayUid(uid, onComplete)
+        }
+    }
+
+    private fun tryReserveDisplayUid(uid: String, onComplete: (String) -> Unit) {
+        val candidate = "%06d".format((100_000..999_999).random())
+        FirebaseUserManager.reserveDisplayUid(uid, candidate) { success ->
+            if (success) onComplete(candidate) else tryReserveDisplayUid(uid, onComplete)
+        }
     }
 
     fun fetchDeviceDoc(uid: String, fid: String, onResult: (Map<String, Any>?) -> Unit) {
@@ -63,6 +92,7 @@ object DeviceRepository {
                     .set(mapOf(fidField to fid), SetOptions.merge())
                     .addOnSuccessListener {
                         AppPreferenceManager.saveString(context, "role", role)
+                        if (role == "CHILD") AppPreferenceManager.saveString(context, "parent_id", uid)
                         onComplete(true)
                     }
                     .addOnFailureListener { e ->

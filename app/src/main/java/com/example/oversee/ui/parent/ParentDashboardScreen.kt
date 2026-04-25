@@ -5,9 +5,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import java.util.Calendar
 
 // --- PROJECT DATA & SERVICES ---
@@ -53,6 +58,13 @@ fun ParentDashboardScreen(
     var sharedStartDate by remember { mutableLongStateOf(defaultStart) }
     var sharedEndDate by remember { mutableLongStateOf(defaultEnd) }
 
+    val onRefreshAndExtendRange = remember(onRefresh) {
+        {
+            sharedEndDate = System.currentTimeMillis()
+            onRefresh()
+        }
+    }
+
     BackHandler(enabled = currentTab != 0) {
         currentTab = when (currentTab) {
             in 6..14 -> 3
@@ -79,7 +91,7 @@ fun ParentDashboardScreen(
                 0 -> DashboardOverviewScreen(
                     targetId = liveTargetId, targetNickname = liveTargetNickname, incidents = incidents,
                     startDate = sharedStartDate, endDate = sharedEndDate, refreshing = refreshing,
-                    onRefresh = onRefresh, onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
+                    onRefresh = onRefreshAndExtendRange, onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
                     onEditClick = { showEditDialog = true },
                     onNavigateToLogs = { currentTab = 2 }, onNotificationClick = { currentTab = 5 }
                 )
@@ -87,7 +99,7 @@ fun ParentDashboardScreen(
                 2 -> ActivityLogScreen(
                     incidents = incidents, startDate = sharedStartDate, endDate = sharedEndDate,
                     onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
-                    refreshing = refreshing, onRefresh = onRefresh, onDebugResetRole = onDebugResetRole
+                    refreshing = refreshing, onRefresh = onRefreshAndExtendRange, onDebugResetRole = onDebugResetRole
                 )
                 3 -> SettingsScreen(
                     onLogoutClick = { showLogoutDialog = true },
@@ -100,7 +112,7 @@ fun ParentDashboardScreen(
                     onHelpSupportClick = { currentTab = 14 }
                 )
                 // Settings Sub-Routes
-                6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefresh)
+                6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefreshAndExtendRange)
                 7 -> EditProfileScreen(onBackClick = { currentTab = 3 })
                 8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
                 9 -> ExportDataScreen(onBackClick = { currentTab = 3 })
@@ -110,6 +122,11 @@ fun ParentDashboardScreen(
 //                13 -> QuietHoursScreen(onBackClick = { currentTab = 3 })
                 14 -> HelpSupportScreen(onBackClick = { currentTab = 3 })
             }
+        }
+
+        // --- SYNC LOADING POPUP ---
+        if (refreshing) {
+            SyncLoadingDialog()
         }
 
         // --- CUSTOM DIALOGS USING THE REUSABLE COMPONENT ---
@@ -152,6 +169,36 @@ fun ParentDashboardScreen(
                 onConfirm = { showLogoutDialog = false; onLogoutClick() },
                 onDismiss = { showLogoutDialog = false }
             )
+        }
+    }
+}
+
+@Composable
+private fun SyncLoadingDialog() {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
+    ) {
+        Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+            color = AppTheme.Surface,
+            tonalElevation = 8.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                CircularProgressIndicator(color = AppTheme.Primary, strokeWidth = 3.dp, modifier = Modifier.size(48.dp))
+                Text("Syncing", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "Fetching latest data from the child device...",
+                    fontSize = 13.sp,
+                    color = androidx.compose.ui.graphics.Color.Gray,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = 18.sp
+                )
+            }
         }
     }
 }

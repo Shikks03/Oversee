@@ -28,6 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 
 // --- PROJECT SPECIFIC ---
 import com.example.oversee.data.AuthRepository
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.remote.FirebaseSyncManager
@@ -50,18 +51,13 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     // State
     var deviceId by remember { mutableStateOf("Loading...") }
+    var displayUid by remember { mutableStateOf("------") }
     val consoleLogs = remember { mutableStateListOf<String>() }
     val healthStates = remember { mutableStateMapOf<String, Boolean>() }
 
-    var parentName by remember { mutableStateOf(AppPreferenceManager.getString(context, "parent_name", "Unknown Parent")) }
-    var parentId by remember { mutableStateOf(AppPreferenceManager.getString(context, "parent_id", "---")) }
-    val syncPrefs = remember { context.getSharedPreferences("SyncPrefs", Context.MODE_PRIVATE) }
-    var lastSyncTimestamp by remember { mutableLongStateOf(syncPrefs.getLong("last_sync_time", 0L)) }
-
-    val lastSyncedTime = remember(lastSyncTimestamp) {
-        if (lastSyncTimestamp == 0L) "Never"
-        else "Today, " + SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(lastSyncTimestamp))
-    }
+    var parentName by remember { mutableStateOf(UserRepository.getLocalName(context).ifBlank { "Unknown Parent" }) }
+    var parentId by remember { mutableStateOf(AuthRepository.getUserId() ?: "---") }
+    var lastSyncedTime by remember { mutableStateOf(AppPreferenceManager.getString(context, "last_synced", "Never")) }
 
     var isReady by remember { mutableStateOf(false) }
     var isDeviceLinked by remember { mutableStateOf(UserRepository.getLocalTargetId(context) != "NOT_LINKED") }
@@ -99,11 +95,17 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
     val triggerSync: () -> Unit = {
         isRefreshing = true
         addToConsole("Sync Event: Manual cloud synchronization triggered.")
-
-        FirebaseSyncManager.syncPendingLogs(context) { _, _ ->
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                isRefreshing = false
-                addToConsole("Sync Event: Complete.")
+        FirebaseSyncManager.syncPendingLogs(context) { uploaded, error ->
+            isRefreshing = false
+            val time = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
+            lastSyncedTime = "Today, $time"
+            AppPreferenceManager.saveString(context, "last_synced", lastSyncedTime)
+            if (error != null) {
+                addToConsole("Sync Event: Failed — $error")
+            } else if (uploaded == 0) {
+                addToConsole("Sync Event: Already up to date.")
+            } else {
+                addToConsole("Sync Event: Complete. $uploaded incident(s) uploaded.")
             }
         }
     }
@@ -111,14 +113,15 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
     LaunchedEffect(Unit) {
         val uid = AuthRepository.getUserId()
         if (uid != null) {
-            // Updated block
             UserRepository.initializeDeviceId(context, uid) { id ->
                 deviceId = id
-
-                // --- NEW FIX: Force key generation and upload immediately ---
+                if (displayUid == "------") displayUid = DeviceRepository.toDisplayCode(id)
                 com.example.oversee.data.local.KeyManager.getOrCreateKey(context, id) {
                     addToConsole("Encryption Key Ready.")
                 }
+            }
+            DeviceRepository.getOrCreateDisplayUid(uid) { uid6 ->
+                if (uid6.isNotBlank()) displayUid = uid6
             }
         }
         performHealthCheck()
@@ -142,18 +145,6 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         }
         ContextCompat.registerReceiver(context, receiver, IntentFilter("com.example.oversee.CONSOLE_UPDATE"), ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
-    }
-
-    DisposableEffect(syncPrefs) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-            if (key == "last_sync_time") {
-                lastSyncTimestamp = prefs.getLong(key, 0L)
-            }
-        }
-        syncPrefs.registerOnSharedPreferenceChangeListener(listener)
-        onDispose {
-            syncPrefs.unregisterOnSharedPreferenceChangeListener(listener)
-        }
     }
 
     val onExitApp = {
@@ -216,21 +207,13 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
         if (showSettingsDialog) {
             ChildSettingsDialog(
-                deviceId = deviceId, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
+                deviceId = deviceId, accountId = displayUid, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
                 consoleLogs = consoleLogs,
                 onDismiss = { showSettingsDialog = false },
                 onChangePin = {
                     AppPreferenceManager.saveString(context, "child_pin", "")
                     savedChildPin = ""
                     showSettingsDialog = false
-                },
-                onEditId = { newId ->
-                    val uid = AuthRepository.getUserId()
-                    if (uid != null) {
-                        UserRepository.updateDeviceId(context, uid, newId) { success ->
-                            if (success) deviceId = newId
-                        }
-                    }
                 },
                 onExitApp = onExitApp,
                 onDebugResetRole = onDebugResetRole

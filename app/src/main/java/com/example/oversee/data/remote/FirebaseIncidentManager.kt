@@ -16,51 +16,54 @@ object FirebaseIncidentManager {
     private val db = FirebaseFirestore.getInstance()
 
     fun fetchIncidents(context: Context, childFid: String, onResult: (List<FirebaseSyncManager.LogEntry>?, String?) -> Unit) {
+        // Fetch the buckets, ordering by document ID (which is the date string) so we get newest first
         db.collection("monitor_sessions").document(childFid).collection("logs")
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(1000)
-            .get()
+            .orderBy(com.google.firebase.firestore.FieldPath.documentId(), Query.Direction.DESCENDING)
+            .limit(3)
+            .get(Source.SERVER)
             .addOnSuccessListener { documents ->
-                Log.d(TAG, "DIAG L3: Firestore returned ${documents.size()} raw documents for fid=$childFid")
                 KeyManager.getKeyForDevice(context, childFid) { key ->
                     if (key == null) {
-                        Log.e(TAG, "DIAG L3: encryption key not found for fid=$childFid — cannot decrypt")
-                        onResult(null, "Encryption key not found. Make sure the child app has been set up.")
+                        onResult(null, "Encryption key not found.")
                         return@getKeyForDevice
                     }
-                    val list = documents.mapNotNull { doc ->
-                        try {
-                            val isEncrypted = doc.getBoolean("encrypted") ?: false
-                            if (isEncrypted) {
-                                // Fallback for old logs that only used "word"
-                                val rawEncrypted = doc.getString("rawWord") ?: doc.getString("word") ?: ""
-                                val matchedEncrypted = doc.getString("matchedWord") ?: doc.getString("word") ?: ""
 
-                                FirebaseSyncManager.LogEntry(
-                                    rawWord = CryptoManager.decryptString(rawEncrypted, key),
-                                    matchedWord = CryptoManager.decryptString(matchedEncrypted, key),
-                                    severity = CryptoManager.decryptString(doc.getString("severity") ?: "", key),
-                                    app = CryptoManager.decryptString(doc.getString("app") ?: "", key),
-                                    timestamp = doc.getLong("timestamp") ?: 0L
-                                )
-                            } else {
-                                val legacyWord = doc.getString("word") ?: "?"
-                                FirebaseSyncManager.LogEntry(
-                                    rawWord = doc.getString("rawWord") ?: legacyWord,
-                                    matchedWord = doc.getString("matchedWord") ?: legacyWord,
-                                    severity = doc.getString("severity") ?: "LOW",
-                                    app = doc.getString("app") ?: "Unknown",
-                                    timestamp = doc.getLong("timestamp") ?: 0L
-                                )
+                    val allLogs = mutableListOf<FirebaseSyncManager.LogEntry>()
+
+                    // 1. Loop through the downloaded buckets (e.g., April, March, February)
+                    for (doc in documents) {
+                        // Extract the big array from the bucket
+                        val logsArray = doc.get("logsArray") as? List<Map<String, Any>> ?: continue
+
+                        // 2. Loop through the individual logs inside the array
+                        for (item in logsArray) {
+                            try {
+                                val isEncrypted = item["encrypted"] as? Boolean ?: false
+                                if (isEncrypted) {
+                                    allLogs.add(
+                                        FirebaseSyncManager.LogEntry(
+                                            rawWord = CryptoManager.decryptString(item["rawWord"] as String? ?: "", key),
+                                            matchedWord = CryptoManager.decryptString(item["matchedWord"] as String? ?: "", key),
+                                            severity = CryptoManager.decryptString(item["severity"] as String? ?: "", key),
+                                            app = CryptoManager.decryptString(item["app"] as String? ?: "", key),
+                                            timestamp = item["timestamp"] as? Long ?: 0L
+                                        )
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to decrypt an item in bucket ${doc.id}", e)
                             }
-                        } catch (e: Exception) { null }
+                        }
                     }
-                    Log.d(TAG, "DIAG L4: decrypted ${list.size} of ${documents.size()} documents")
-                    onResult(list, null)
+
+                    // 3. Sort the combined list so the newest items are at the top
+                    allLogs.sortByDescending { it.timestamp }
+
+                    // Send the data to the UI!
+                    onResult(allLogs, null)
                 }
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "DIAG L3: Firestore query FAILED for fid=$childFid: ${e.message}", e)
                 onResult(null, e.message)
             }
     }
