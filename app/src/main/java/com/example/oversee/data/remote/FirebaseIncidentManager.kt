@@ -18,7 +18,7 @@ object FirebaseIncidentManager {
     fun fetchIncidents(context: Context, childFid: String, onResult: (List<FirebaseSyncManager.LogEntry>?, String?) -> Unit) {
         db.collection("monitor_sessions").document(childFid).collection("logs")
             .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(50)
+            .limit(1000)
             .get()
             .addOnSuccessListener { documents ->
                 Log.d(TAG, "DIAG L3: Firestore returned ${documents.size()} raw documents for fid=$childFid")

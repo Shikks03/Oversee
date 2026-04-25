@@ -84,7 +84,7 @@ fun AppRouter() {
                         val uid = AuthRepository.getUserId()
                         if (uid != null) {
                             com.example.oversee.data.local.KeyManager.restoreSession(context)
-                            
+
                             UserRepository.refreshLocalProfile(context, uid) {
                                 val role = UserRepository.getLocalRole(context)
                                 userName = UserRepository.getLocalName(context)
@@ -338,7 +338,7 @@ fun AppRouter() {
                 ParentDashboardScreen(
                     targetId = childFid ?: "",
                     targetNickname = AppPreferenceManager.getString(context, "target_nickname", "Child Device"),
-                    incidents = incidents,
+                    incidents = incidents.toList(),
                     refreshing = isRefreshing,
                     onRefresh = { loadData() },
                     onLogoutClick = {
