@@ -92,6 +92,7 @@ object DeviceRepository {
                     .set(mapOf(fidField to fid), SetOptions.merge())
                     .addOnSuccessListener {
                         AppPreferenceManager.saveString(context, "role", role)
+                        if (role == "CHILD") AppPreferenceManager.saveString(context, "parent_id", uid)
                         onComplete(true)
                     }
                     .addOnFailureListener { e ->

@@ -25,7 +25,7 @@ import com.example.oversee.ui.theme.AppTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChildSettingsDialog(
-    deviceId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
+    deviceId: String, accountId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
     onDismiss: () -> Unit, onChangePin: () -> Unit, onEditId: (String) -> Unit,
     onExitApp: () -> Unit, onDebugResetRole: () -> Unit
 ) {
@@ -53,6 +53,8 @@ fun ChildSettingsDialog(
                         Column {
                             // Moved Device ID here!
                             SettingsRow(icon = Icons.Rounded.Smartphone, title = "This Device ID", subtitle = deviceId, onClick = null)
+                            HorizontalDivider(color = AppTheme.ChildBackground)
+                            SettingsRow(icon = Icons.Rounded.Tag, title = "Account ID", subtitle = accountId, onClick = null)
                             HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.Rounded.Person, title = "Connected Parent", subtitle = parentName, onClick = null)
                             HorizontalDivider(color = AppTheme.ChildBackground)
