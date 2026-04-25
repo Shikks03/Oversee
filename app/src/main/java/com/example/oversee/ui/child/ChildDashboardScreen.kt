@@ -207,14 +207,6 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                     savedChildPin = ""
                     showSettingsDialog = false
                 },
-                onEditId = { newId ->
-                    val uid = AuthRepository.getUserId()
-                    if (uid != null) {
-                        UserRepository.updateDeviceId(context, uid, newId) { success ->
-                            if (success) deviceId = newId
-                        }
-                    }
-                },
                 onExitApp = onExitApp,
                 onDebugResetRole = onDebugResetRole
             )
