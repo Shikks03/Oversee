@@ -10,13 +10,8 @@ import com.example.oversee.utils.sendConsoleUpdate
 
 class FacebookAccessibilityService : AccessibilityService() {
 
-    private var lastFbEventTime = 0L
-    private val TAG = "FacebookAccess"
-
-    override fun onServiceConnected() {
-        super.onServiceConnected()
-        sendConsoleUpdate("System: Accessibility Connected")
-    }
+    private var lastEventTime = 0L // Renamed for generic use
+    private val TAG = "AppMonitorAccess"
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val eventType = event?.eventType
@@ -27,22 +22,28 @@ class FacebookAccessibilityService : AccessibilityService() {
             } == true
         }
 
-        val pkg = event?.packageName?.toString()
+        val pkg = event?.packageName?.toString() ?: ""
 
-        if (pkg != null && (pkg.contains("facebook") || pkg.contains("katana") || pkg.contains("lite"))) {
+        // --- NEW DETECTION LOGIC ---
+        // 1. Monitor Facebook, but EXCLUDE Messenger (com.facebook.orca)
+        val isFacebook = pkg.contains("facebook") && !pkg.contains("orca")
+        // 2. Add Instagram
+        val isInstagram = pkg.contains("instagram")
 
-            if (!ScreenCaptureService.ScreenState.isFacebookOpen) {
-                ScreenCaptureService.ScreenState.isFacebookOpen = true
-                sendConsoleUpdate("App Event: Facebook Opened")
-                Log.d(TAG, "App Event: Facebook Opened")
+        if (isFacebook || isInstagram) {
+            val appName = if (isInstagram) "Instagram" else "Facebook"
+
+            // If switching apps or opening for the first time
+            if (!ScreenCaptureService.ScreenState.isAppOpen || ScreenCaptureService.ScreenState.currentAppName != appName) {
+                ScreenCaptureService.ScreenState.isAppOpen = true
+                ScreenCaptureService.ScreenState.currentAppName = appName
+                sendConsoleUpdate("App Event: $appName Opened")
+                Log.d(TAG, "App Event: $appName Opened")
             }
 
-            // --- THE CONTINUOUS DRY CHECK ---
-            // It checks on EVERY event inside Facebook to ensure the lock is inescapable.
             val unlockTime = AppPreferenceManager.getLong(this, "app_unlock_time", 0L)
 
             if (System.currentTimeMillis() < unlockTime) {
-                // Priority 1: Penalty Timer
                 try {
                     val intent = Intent(this, OverlayService::class.java).apply {
                         putExtra(OverlayService.EXTRA_OVERLAY_MODE, OverlayService.MODE_SEVERE_WARNING)
@@ -51,7 +52,6 @@ class FacebookAccessibilityService : AccessibilityService() {
                 } catch (e: Exception) { Log.e(TAG, "Failed to start penalty overlay", e) }
             }
             else if (!ScreenCaptureService.CaptureState.isRunning) {
-                // Priority 2: Screen Capture Permission
                 try {
                     val intent = Intent(this, OverlayService::class.java).apply {
                         putExtra(OverlayService.EXTRA_OVERLAY_MODE, OverlayService.MODE_REQUIRE_MONITORING)
@@ -60,15 +60,14 @@ class FacebookAccessibilityService : AccessibilityService() {
                 } catch (e: Exception) { Log.e(TAG, "Failed to start permission overlay", e) }
             }
 
-            lastFbEventTime = System.currentTimeMillis()
+            lastEventTime = System.currentTimeMillis()
 
-        } else if (System.currentTimeMillis() - lastFbEventTime > 2000) {
-            if (ScreenCaptureService.ScreenState.isFacebookOpen) {
-                ScreenCaptureService.ScreenState.isFacebookOpen = false
-                sendConsoleUpdate("App Event: Facebook Closed")
+        } else if (System.currentTimeMillis() - lastEventTime > 2000) {
+            // Only close if we haven't seen a monitored app event in 2 seconds
+            if (ScreenCaptureService.ScreenState.isAppOpen) {
+                ScreenCaptureService.ScreenState.isAppOpen = false
+                sendConsoleUpdate("App Event: Monitored App Closed")
 
-                // --- AUTO-HIDE ---
-                // If they leave Facebook natively, kill the overlay so it doesn't brick their phone.
                 try {
                     stopService(Intent(this, OverlayService::class.java))
                 } catch (e: Exception) {}

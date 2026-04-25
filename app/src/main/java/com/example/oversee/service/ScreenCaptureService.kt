@@ -132,7 +132,7 @@ class ScreenCaptureService : Service() {
     // --- CAPTURE LOOP ---
     private val captureRunnable = object : Runnable {
         override fun run() {
-            if (ScreenState.isFacebookOpen) {
+            if (ScreenState.isAppOpen) { // Changed from isFacebookOpen
                 if (overlayView == null) handler.post { showMonitoringOverlay() }
 
                 val currentId = attemptCount.incrementAndGet()
@@ -220,10 +220,10 @@ class ScreenCaptureService : Service() {
                                 IncidentRepository.saveIncident(
                                     applicationContext,
                                     Incident(
-                                        rawWord = scored.rawToken,
+                                        rawWord = scored.originalText,
                                         matchedWord = scored.matchedWord,
                                         severity = severity,
-                                        appName = "Facebook"
+                                        appName = ScreenState.currentAppName // Use the dynamic name
                                     )
                                 )
 
@@ -394,7 +394,8 @@ class ScreenCaptureService : Service() {
 
     object CaptureState { @Volatile var isRunning = false }
     object ScreenState {
-        @Volatile var isFacebookOpen = false
+        @Volatile var isAppOpen = false // Generic flag
+        @Volatile var currentAppName = "Unknown" // Dynamic name
         @Volatile var isKeyboardVisible = false
     }
 }
