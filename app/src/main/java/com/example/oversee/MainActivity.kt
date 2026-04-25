@@ -192,7 +192,7 @@ fun AppRouter() {
                     DeviceRepository.getFid { newFid ->
                         if (newFid != null) {
                             // 1. Check if the parent already has a child linked
-                            FirebaseUserManager.fetchDeviceFidPointers(uid) { _, existingChildFid ->
+                            FirebaseUserManager.fetchDeviceFidPointers(uid) { _, existingChildFid, _ ->
                                 if (existingChildFid != null && existingChildFid != newFid) {
                                     // 2. An old device exists! Trigger the pop-up.
                                     existingOldFid = existingChildFid
@@ -257,6 +257,7 @@ fun AppRouter() {
             }
         ) {
             var childFid by remember { mutableStateOf<String?>(null) }
+            var childDisplayUid by remember { mutableStateOf<String?>(null) }
             val incidents = remember { mutableStateListOf<FirebaseSyncManager.LogEntry>() }
             var isRefreshing by remember { mutableStateOf(false) }
 
@@ -269,8 +270,9 @@ fun AppRouter() {
                 isRefreshing = true
                 val uid = AuthRepository.getUserId()
                 if (uid != null) {
-                    FirebaseUserManager.fetchDeviceFidPointers(uid) { _, cFid ->
+                    FirebaseUserManager.fetchDeviceFidPointers(uid) { _, cFid, cDisplayUid ->
                         childFid = cFid
+                        childDisplayUid = cDisplayUid
                         if (cFid != null) {
                             FirebaseSyncManager.requestChildSync(cFid)
                             IncidentRepository.fetchRecentIncidents(context, cFid, onSuccess = { logs ->
@@ -307,7 +309,7 @@ fun AppRouter() {
                 )
             } else {
                 ParentDashboardScreen(
-                    targetId = DeviceRepository.toDisplayCode(childFid),
+                    targetId = childDisplayUid ?: DeviceRepository.toDisplayCode(childFid),
                     targetNickname = AppPreferenceManager.getString(context, "target_nickname", "Child Device"),
                     incidents = incidents,
                     refreshing = isRefreshing,

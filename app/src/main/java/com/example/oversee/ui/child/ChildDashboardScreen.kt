@@ -28,6 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 
 // --- PROJECT SPECIFIC ---
 import com.example.oversee.data.AuthRepository
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.remote.FirebaseSyncManager
@@ -50,6 +51,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     // State
     var deviceId by remember { mutableStateOf("Loading...") }
+    var displayUid by remember { mutableStateOf("------") }
     val consoleLogs = remember { mutableStateListOf<String>() }
     val healthStates = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -105,7 +107,10 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     LaunchedEffect(Unit) {
         val uid = AuthRepository.getUserId()
-        if (uid != null) UserRepository.initializeDeviceId(context, uid) { id -> deviceId = id }
+        if (uid != null) {
+            UserRepository.initializeDeviceId(context, uid) { id -> deviceId = id }
+            DeviceRepository.getOrCreateDisplayUid(uid) { uid6 -> displayUid = uid6 }
+        }
         performHealthCheck()
         addToConsole("System Initialized.")
     }
