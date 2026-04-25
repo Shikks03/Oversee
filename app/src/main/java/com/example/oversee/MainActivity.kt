@@ -274,6 +274,7 @@ fun AppRouter() {
                     FirebaseUserManager.fetchDeviceFidPointers(uid) { _, cFid ->
                         childFid = cFid
                         if (cFid != null) {
+                            FirebaseSyncManager.requestChildSync(cFid)
                             IncidentRepository.fetchRecentIncidents(context, cFid, onSuccess = { logs ->
                                 incidents.clear()
                                 incidents.addAll(logs)
@@ -336,7 +337,7 @@ fun AppRouter() {
                 )
             } else {
                 ParentDashboardScreen(
-                    targetId = childFid ?: "",
+                    targetId = DeviceRepository.toDisplayCode(childFid),
                     targetNickname = AppPreferenceManager.getString(context, "target_nickname", "Child Device"),
                     incidents = incidents.toList(),
                     refreshing = isRefreshing,
