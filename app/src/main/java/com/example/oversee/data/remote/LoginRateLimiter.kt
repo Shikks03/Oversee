@@ -1,5 +1,7 @@
 package com.example.oversee.data.remote
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.concurrent.thread
@@ -23,6 +25,7 @@ object LoginRateLimiter {
     private const val COLLECTION = "login_attempts"
 
     private val db = FirebaseFirestore.getInstance()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     /** Cached for the process lifetime; clears on app restart. */
     private var cachedIp: String? = null
@@ -137,12 +140,13 @@ object LoginRateLimiter {
     /**
      * Fetches the device's public IPv4 address via api.ipify.org.
      * Result is cached in memory for the process lifetime.
-     * Runs network I/O on a dedicated background thread; calls [onResult] from that thread.
+     * Runs network I/O on a dedicated background thread; [onResult] is always
+     * delivered on the main thread so callers can safely touch UI.
      */
     private fun fetchPublicIp(onResult: (String?) -> Unit) {
         cachedIp?.let { onResult(it); return }
         thread(name = "IpFetch") {
-            try {
+            val ip = try {
                 val url = java.net.URL(IP_URL)
                 val connection = url.openConnection() as java.net.HttpURLConnection
                 connection.apply {
@@ -150,14 +154,15 @@ object LoginRateLimiter {
                     connectTimeout = 5_000
                     readTimeout = 5_000
                 }
-                val ip = connection.inputStream.bufferedReader().readText().trim()
+                val result = connection.inputStream.bufferedReader().readText().trim()
                 connection.disconnect()
-                cachedIp = ip
-                onResult(ip)
+                cachedIp = result
+                result
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch public IP", e)
-                onResult(null)
+                null
             }
+            mainHandler.post { onResult(ip) }
         }
     }
 
