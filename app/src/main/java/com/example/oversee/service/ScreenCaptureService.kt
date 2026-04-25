@@ -53,6 +53,9 @@ class ScreenCaptureService : Service() {
         private const val SYNC_INTERVAL = 28_800_000L
         private const val CAPTURE_INTERVAL = 3000L
         private const val DEBOUNCE_TIME_MS = 10_000L
+
+        // --- NEW: Burst Time Window ---
+        private const val BURST_TIME_WINDOW_MS = 300_000L // 5 minutes
     }
 
     private lateinit var projection: MediaProjection
@@ -68,6 +71,9 @@ class ScreenCaptureService : Service() {
 
     private val debounceMap = ConcurrentHashMap<String, Long>()
     private val ocrExecutor = Executors.newSingleThreadExecutor()
+
+    // --- NEW: Tracks timestamps of recent incidents ---
+    private val recentIncidents = mutableListOf<Long>()
 
     // Step 6: cached system-bar insets computed once in setupVirtualDisplay
     private var topInset = 0
@@ -242,13 +248,29 @@ class ScreenCaptureService : Service() {
                 val analysisResult = textAnalysisEngine.analyze(text)
                 val scoredWords = ToxicityScorer.score(analysisResult)
                 Log.d(TAG, "OCR Text: $text")
+
                 if (scoredWords.isNotEmpty()) {
+                    // --- PREFERENCES FETCH (Safely fetched once per frame) ---
+                    val blockMins = try { AppPreferenceManager.getLong(applicationContext, "block_duration_mins", 5L) } catch (e: Exception) { 5L }
+                    val burstThreshold = try { AppPreferenceManager.getLong(applicationContext, "burst_threshold", 50L).toInt() } catch (e: Exception) { 50 }
+
                     scoredWords.forEach { scored ->
                         val lastSeen = debounceMap[scored.matchedWord] ?: 0L
                         val now = System.currentTimeMillis()
+
                         if (now - lastSeen > DEBOUNCE_TIME_MS) {
                             debounceMap[scored.matchedWord] = now
-                            val severity = mapSeverity(scored.severity)
+                            var severity = mapSeverity(scored.severity)
+
+                            // --- BURST DETECTION LOGIC ---
+                            recentIncidents.removeAll { now - it > BURST_TIME_WINDOW_MS }
+                            recentIncidents.add(now)
+
+                            if (recentIncidents.size >= burstThreshold) {
+                                severity = "HIGH"
+                                recentIncidents.clear() // Prevent loop
+                                sendConsoleUpdate("🚨 BURST THRESHOLD REACHED: $burstThreshold alerts in 5 mins! Escalating to HIGH risk. 🚨")
+                            }
 
                             IncidentRepository.saveIncident(
                                 applicationContext,
@@ -259,10 +281,12 @@ class ScreenCaptureService : Service() {
                                     appName = "Facebook"
                                 )
                             )
-                            // --- NEW: Trigger Actions for HIGH severity ---
-                            if (severity == "HIGH") {
 
-                                // Pop up the blocking overlay over Facebook
+                            // --- PENALTY OVERLAY LOGIC ---
+                            if (severity == "HIGH") {
+                                val unlockTime = System.currentTimeMillis() + (blockMins * 60 * 1000L)
+                                try { AppPreferenceManager.saveLong(applicationContext, "app_unlock_time", unlockTime) } catch (e: Exception) {}
+
                                 val overlayIntent = Intent(applicationContext, OverlayService::class.java).apply {
                                     putExtra(OverlayService.EXTRA_OVERLAY_MODE, OverlayService.MODE_SEVERE_WARNING)
                                 }
@@ -327,20 +351,36 @@ class ScreenCaptureService : Service() {
 
             // Only baseline's incidents are saved
             val scoredWords = ToxicityScorer.score(textAnalysisEngine.analyze(textA))
+
+            // --- Safe Preferences Fetch for Debug Mode ---
+            val blockMins = try { AppPreferenceManager.getLong(applicationContext, "block_duration_mins", 5L) } catch (e: Exception) { 5L }
+
             scoredWords.forEach { scored ->
                 val lastSeen = debounceMap[scored.matchedWord] ?: 0L
                 val now = System.currentTimeMillis()
                 if (now - lastSeen > DEBOUNCE_TIME_MS) {
                     debounceMap[scored.matchedWord] = now
+                    val severity = mapSeverity(scored.severity)
+
                     IncidentRepository.saveIncident(
                         applicationContext,
                         Incident(
                             rawWord = scored.rawToken,
                             matchedWord = scored.matchedWord,
-                            severity = mapSeverity(scored.severity),
+                            severity = severity,
                             appName = "Facebook"
                         )
                     )
+
+                    if (severity == "HIGH") {
+                        val unlockTime = System.currentTimeMillis() + (blockMins * 60 * 1000L)
+                        try { AppPreferenceManager.saveLong(applicationContext, "app_unlock_time", unlockTime) } catch (e: Exception) {}
+
+                        val overlayIntent = Intent(applicationContext, OverlayService::class.java).apply {
+                            putExtra(OverlayService.EXTRA_OVERLAY_MODE, OverlayService.MODE_SEVERE_WARNING)
+                        }
+                        startService(overlayIntent)
+                    }
                 }
             }
         } catch (e: Exception) {

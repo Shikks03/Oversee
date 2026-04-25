@@ -44,11 +44,17 @@ object KeyManager {
      * DO NOT call this on the parent device.
      */
     fun getOrCreateKey(context: Context, deviceId: String, onReady: (SecretKey) -> Unit) {
+        restoreSession(context)
+
         cachedKey?.let { onReady(it); return }
 
         val localKey = loadLocalKey(context)
         if (localKey != null) {
             cachedKey = localKey
+            // Self-Healing Mechanism: Upload the trapped key!
+            uploadKeyToFirestore(deviceId, localKey) { success ->
+                if (success) Log.d(TAG, "✅ Self-Healing: Local key backed up to Cloud.")
+            }
             onReady(localKey)
             return
         }
@@ -77,6 +83,8 @@ object KeyManager {
      * Uses per-deviceId caching so parent and child keys never collide.
      */
     fun getKeyForDevice(context: Context, deviceId: String, onReady: (SecretKey?) -> Unit) {
+        restoreSession(context)
+
         keyCache[deviceId]?.let { onReady(it); return }
 
         val localKey = loadLocalKeyForDevice(context, deviceId)
@@ -94,6 +102,21 @@ object KeyManager {
                 Log.w(TAG, "No encryption key found in Firestore for deviceId=$deviceId")
             }
             onReady(remoteKey)
+        }
+    }
+
+    fun restoreSession(context: Context) {
+        if (_sessionKek != null) return // Already in memory
+
+        val encoded = AppPreferenceManager.getString(context, "secure_session_kek", "")
+        if (encoded.isNotEmpty()) {
+            try {
+                val decoded = android.util.Base64.decode(encoded, android.util.Base64.NO_WRAP)
+                _sessionKek = javax.crypto.spec.SecretKeySpec(decoded, "AES")
+                Log.d(TAG, "✅ Session KEK restored from secure storage.")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to restore session KEK", e)
+            }
         }
     }
 

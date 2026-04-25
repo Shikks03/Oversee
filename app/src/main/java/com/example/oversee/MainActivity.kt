@@ -83,6 +83,8 @@ fun AppRouter() {
                     if (AuthRepository.isUserLoggedIn()) {
                         val uid = AuthRepository.getUserId()
                         if (uid != null) {
+                            com.example.oversee.data.local.KeyManager.restoreSession(context)
+                            
                             UserRepository.refreshLocalProfile(context, uid) {
                                 val role = UserRepository.getLocalRole(context)
                                 userName = UserRepository.getLocalName(context)
@@ -285,6 +287,34 @@ fun AppRouter() {
                         }
                     }
                 }
+            }
+
+            // --- NEW FIX 1: Auto-refresh instantly if the parent has the app open when the alert arrives ---
+            DisposableEffect(context) {
+                val receiver = object : android.content.BroadcastReceiver() {
+                    override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                        if (intent?.action == "com.example.oversee.REFRESH_DASHBOARD") {
+                            loadData()
+                        }
+                    }
+                }
+                androidx.core.content.ContextCompat.registerReceiver(
+                    context, receiver, android.content.IntentFilter("com.example.oversee.REFRESH_DASHBOARD"),
+                    androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+                onDispose { context.unregisterReceiver(receiver) }
+            }
+
+            // --- NEW FIX 2: Auto-refresh when the app is brought to the foreground (e.g., clicking the notification) ---
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        loadData()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
             }
 
             LaunchedEffect(Unit) {

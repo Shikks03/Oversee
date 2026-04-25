@@ -55,7 +55,13 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     var parentName by remember { mutableStateOf(AppPreferenceManager.getString(context, "parent_name", "Unknown Parent")) }
     var parentId by remember { mutableStateOf(AppPreferenceManager.getString(context, "parent_id", "---")) }
-    var lastSyncedTime by remember { mutableStateOf(AppPreferenceManager.getString(context, "last_synced", "Never")) }
+    val syncPrefs = remember { context.getSharedPreferences("SyncPrefs", Context.MODE_PRIVATE) }
+    var lastSyncTimestamp by remember { mutableLongStateOf(syncPrefs.getLong("last_sync_time", 0L)) }
+
+    val lastSyncedTime = remember(lastSyncTimestamp) {
+        if (lastSyncTimestamp == 0L) "Never"
+        else "Today, " + SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(lastSyncTimestamp))
+    }
 
     var isReady by remember { mutableStateOf(false) }
     var isDeviceLinked by remember { mutableStateOf(UserRepository.getLocalTargetId(context) != "NOT_LINKED") }
@@ -92,15 +98,14 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
     // FIXED: Explicitly declared as () -> Unit to satisfy Compose Button requirements
     val triggerSync: () -> Unit = {
         isRefreshing = true
-        FirebaseSyncManager.syncPendingLogs(context)
         addToConsole("Sync Event: Manual cloud synchronization triggered.")
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            isRefreshing = false
-            val time = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
-            lastSyncedTime = "Today, $time"
-            AppPreferenceManager.saveString(context, "last_synced", lastSyncedTime)
-            addToConsole("Sync Event: Complete.")
-        }, 1500)
+
+        FirebaseSyncManager.syncPendingLogs(context) { _, _ ->
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                isRefreshing = false
+                addToConsole("Sync Event: Complete.")
+            }
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -137,6 +142,18 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         }
         ContextCompat.registerReceiver(context, receiver, IntentFilter("com.example.oversee.CONSOLE_UPDATE"), ContextCompat.RECEIVER_NOT_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
+    }
+
+    DisposableEffect(syncPrefs) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == "last_sync_time") {
+                lastSyncTimestamp = prefs.getLong(key, 0L)
+            }
+        }
+        syncPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose {
+            syncPrefs.unregisterOnSharedPreferenceChangeListener(listener)
+        }
     }
 
     val onExitApp = {

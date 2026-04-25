@@ -56,6 +56,12 @@ class OverseeMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "High severity alert received from FCM")
         createNotificationChannel()
         showIncidentNotification()
+
+        // --- NEW: Tell the open dashboard to refresh instantly! ---
+        val refreshIntent = Intent("com.example.oversee.REFRESH_DASHBOARD").apply {
+            setPackage(packageName)
+        }
+        sendBroadcast(refreshIntent)
     }
 
     private fun createNotificationChannel() {

@@ -10,6 +10,7 @@ import org.json.JSONObject
 import java.io.File
 import androidx.core.content.edit
 
+
 /**
  * Handles synchronization between Local Storage and Firebase Firestore.
  *
@@ -37,6 +38,8 @@ object FirebaseSyncManager {
 
         if (newLogs.isEmpty()) {
             Log.d(TAG, "☁️ Sync skipped: No new logs.")
+
+            saveLastSyncTime(context, System.currentTimeMillis())
             onDone?.invoke(0, null)
             return
         }
@@ -75,11 +78,14 @@ object FirebaseSyncManager {
             }
             batch.commit()
                 .addOnSuccessListener {
-                    Log.d(TAG, "✅ Cloud Sync Complete!")
+                    Log.d(TAG, "✅ Cloud Sync Complete! (${logs.size} items securely uploaded)")
                     saveLastSyncTime(context, System.currentTimeMillis())
                     onDone?.invoke(logs.size, null)
                 }
-                .addOnFailureListener { e -> onDone?.invoke(0, e.message) }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "❌ Cloud Sync Failed: ${e.message}", e)
+                    onDone?.invoke(0, e.message)
+                }
         }
     }
 

@@ -13,7 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,7 +29,6 @@ class OverlayService : Service() {
         private const val TAG = "OverlayService"
         const val ACTION_CAPTURE_STARTED = "com.example.oversee.CAPTURE_STARTED"
 
-        // --- NEW: Overlay Modes ---
         const val EXTRA_OVERLAY_MODE = "overlay_mode"
         const val MODE_REQUIRE_MONITORING = "mode_require_monitoring"
         const val MODE_SEVERE_WARNING = "mode_severe_warning"
@@ -57,7 +56,6 @@ class OverlayService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         currentMode = intent?.getStringExtra(EXTRA_OVERLAY_MODE) ?: MODE_REQUIRE_MONITORING
 
-        // Only skip if we are asking for permission AND it's already running
         if (currentMode == MODE_REQUIRE_MONITORING && ScreenCaptureService.CaptureState.isRunning) {
             stopSelf()
             return START_STICKY
@@ -97,9 +95,10 @@ class OverlayService : Service() {
                             mode = currentMode,
                             onPrimaryClick = {
                                 if (currentMode == MODE_REQUIRE_MONITORING) startPermissionActivity()
-                                else handleDecline() // For warning, primary action is to leave app
+                                else handleDecline()
                             },
-                            onSecondaryClick = { handleDecline() }
+                            onSecondaryClick = { handleDecline() },
+                            onTimerComplete = { removeBlocker() } // Dissolves the overlay seamlessly!
                         )
                     }
                 }
@@ -114,7 +113,7 @@ class OverlayService : Service() {
         blockerView?.let {
             windowManager.removeView(it)
             blockerView = null
-            stopSelf()
+            // Don't stopSelf() here if you want it to be re-triggerable quickly
         }
     }
 
@@ -136,8 +135,26 @@ class OverlayService : Service() {
 }
 
 @Composable
-fun OverseeOverlay(mode: String, onPrimaryClick: () -> Unit, onSecondaryClick: () -> Unit) {
+fun OverseeOverlay(
+    mode: String,
+    onPrimaryClick: () -> Unit,
+    onSecondaryClick: () -> Unit,
+    onTimerComplete: () -> Unit = {} // Added default empty lambda for backward compatibility
+) {
     val isWarning = mode == OverlayService.MODE_SEVERE_WARNING
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val unlockTime = com.example.oversee.data.local.AppPreferenceManager.getLong(context, "app_unlock_time", 0L)
+    var timeLeftSecs by remember { mutableLongStateOf(maxOf(0L, (unlockTime - System.currentTimeMillis()) / 1000)) }
+
+    LaunchedEffect(isWarning) {
+        if (isWarning) {
+            while (timeLeftSecs > 0) {
+                kotlinx.coroutines.delay(1000)
+                timeLeftSecs = maxOf(0L, (unlockTime - System.currentTimeMillis()) / 1000)
+            }
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -156,26 +173,38 @@ fun OverseeOverlay(mode: String, onPrimaryClick: () -> Unit, onSecondaryClick: (
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = if (isWarning) "Take a Breath" else "Monitoring Required",
+                    text = if (isWarning && timeLeftSecs > 0) "Timeout Active" else if (isWarning) "Break Complete" else "Monitoring Required",
                     fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Black
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = if (isWarning) "We noticed some highly negative interactions. Let's take a quick break from Facebook."
-                    else "To use Facebook, you must enable screen monitoring.",
-                    fontSize = 16.sp, color = Color.Gray,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
+
+                if (isWarning && timeLeftSecs > 0) {
+                    val mins = timeLeftSecs / 60
+                    val secs = timeLeftSecs % 60
+                    Text("We noticed some highly negative interactions.", fontSize = 14.sp, color = Color.Gray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(Modifier.height(16.dp))
+                    Text(String.format(java.util.Locale.US, "%02d:%02d", mins, secs), fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color(0xFFD32F2F))
+                } else {
+                    Text(
+                        text = if (isWarning) "You may now return to the app. Please be mindful of your interactions." else "To use Facebook, you must enable screen monitoring.",
+                        fontSize = 16.sp, color = Color.Gray,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
-                    onClick = onPrimaryClick,
+                    onClick = {
+                        // FIX: Check if they are clicking the button after the timer is complete
+                        if (isWarning && timeLeftSecs <= 0) onTimerComplete() else onPrimaryClick()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isWarning) Color(0xFF1976D2) else Color(0xFFD32F2F)
                     )
                 ) {
-                    Text(if (isWarning) "Close App" else "Enable & Continue", color = Color.White)
+                    Text(if (isWarning && timeLeftSecs > 0) "Exit App" else if (isWarning) "Return to Facebook" else "Enable & Continue", color = Color.White)
                 }
 
                 if (!isWarning) {

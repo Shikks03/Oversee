@@ -1,6 +1,7 @@
 package com.example.oversee.data
 
 import android.content.Context
+import android.util.Log
 import com.example.oversee.data.local.LocalStorageManager
 import com.example.oversee.data.model.Incident
 import com.example.oversee.data.remote.FcmAlertManager
@@ -12,12 +13,16 @@ import com.example.oversee.data.remote.FirebaseSyncManager
  */
 object IncidentRepository {
 
+    private const val TAG = "IncidentRepository"
     // Save logic for Child device
     fun saveIncident(context: Context, incident: Incident) {
         LocalStorageManager.logIncident(context, incident.rawWord, incident.matchedWord, incident.severity, incident.appName)
 
         if (incident.severity == "HIGH") {
+            Log.d(TAG, "🚨 High-Risk Incident Logged! Initiating Emergency Cloud Sync...")
             FirebaseSyncManager.syncPendingLogs(context)
+
+            Log.d(TAG, "🚨 Pushing Emergency Alert Notification to Parent Device...")
             FcmAlertManager.sendHighSeverityAlert(context)
         }
     }

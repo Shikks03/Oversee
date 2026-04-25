@@ -56,13 +56,13 @@ object FcmAlertManager {
 
                     val code = connection.responseCode
                     if (code == 200) {
-                        Log.d(TAG, "Alert sent successfully")
+                        Log.d(TAG, "✅ Emergency FCM Alert successfully delivered to Parent!")
                     } else {
-                        Log.w(TAG, "Alert returned HTTP $code")
+                        Log.w(TAG, "⚠️ Failed to deliver Emergency Alert (HTTP $code)")
                     }
                     connection.disconnect()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to send high severity alert", e)
+                    Log.e(TAG, "❌ Error sending Emergency Alert", e)
                 }
             }
         }

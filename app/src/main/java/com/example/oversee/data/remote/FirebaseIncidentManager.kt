@@ -19,7 +19,7 @@ object FirebaseIncidentManager {
         db.collection("monitor_sessions").document(childFid).collection("logs")
             .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
-            .get(Source.SERVER)
+            .get()
             .addOnSuccessListener { documents ->
                 Log.d(TAG, "DIAG L3: Firestore returned ${documents.size()} raw documents for fid=$childFid")
                 KeyManager.getKeyForDevice(context, childFid) { key ->
