@@ -29,6 +29,13 @@ object FirebaseSyncManager {
 
     // --- PUBLIC API ---
 
+    fun requestChildSync(childFid: String) {
+        FirebaseFirestore.getInstance()
+            .collection(COLLECTION_SESSIONS).document(childFid)
+            .set(hashMapOf("sync_requested_at" to System.currentTimeMillis()), com.google.firebase.firestore.SetOptions.merge())
+            .addOnFailureListener { e -> Log.w(TAG, "Parent sync request failed: ${e.message}") }
+    }
+
     fun syncPendingLogs(context: Context, onDone: ((uploaded: Int, error: String?) -> Unit)? = null) {
         val lastSyncTime = getLastSyncTime(context)
         val allLogs = parseLocalLogs(context)

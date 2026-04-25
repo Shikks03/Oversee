@@ -16,8 +16,10 @@ object IncidentRepository {
     fun saveIncident(context: Context, incident: Incident) {
         LocalStorageManager.logIncident(context, incident.rawWord, incident.matchedWord, incident.severity, incident.appName)
 
-        if (incident.severity == "HIGH") {
+        if (incident.severity == "HIGH" || incident.severity == "MEDIUM") {
             FirebaseSyncManager.syncPendingLogs(context)
+        }
+        if (incident.severity == "HIGH") {
             FcmAlertManager.sendHighSeverityAlert(context)
         }
     }

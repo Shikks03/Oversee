@@ -36,12 +36,15 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 // --- PROJECT IMPORTS ---
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.IncidentRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.model.Incident
 import com.example.oversee.domain.TextAnalysisEngine
 import com.example.oversee.domain.ToxicityScorer
 import com.example.oversee.utils.sendConsoleUpdate
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.googlecode.tesseract.android.TessBaseAPI
 import java.io.File
 import java.io.FileWriter
@@ -74,6 +77,9 @@ class ScreenCaptureService : Service() {
 
     private val debounceMap = ConcurrentHashMap<String, Long>()
     private val ocrExecutor = Executors.newSingleThreadExecutor()
+
+    private var syncRequestListener: ListenerRegistration? = null
+    @Volatile private var lastHandledSyncRequest = 0L
 
     // Step 6: cached system-bar insets computed once in setupVirtualDisplay
     private var topInset = 0
@@ -124,6 +130,7 @@ class ScreenCaptureService : Service() {
 
         handler.post(captureRunnable)
         handler.postDelayed(syncRunnable, SYNC_INTERVAL)
+        listenForParentSyncRequests()
 
         return START_STICKY
     }
@@ -316,6 +323,24 @@ class ScreenCaptureService : Service() {
         bottomInset = insets.bottom
     }
 
+    private fun listenForParentSyncRequests() {
+        DeviceRepository.getFid { fid ->
+            if (fid == null) return@getFid
+            syncRequestListener = FirebaseFirestore.getInstance()
+                .collection("monitor_sessions").document(fid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
+                    val requestedAt = snapshot.getLong("sync_requested_at") ?: return@addSnapshotListener
+                    if (requestedAt > lastHandledSyncRequest) {
+                        lastHandledSyncRequest = requestedAt
+                        Log.d(TAG, "📲 Parent requested sync")
+                        sendConsoleUpdate("System: Parent requested sync")
+                        IncidentRepository.syncData(applicationContext)
+                    }
+                }
+        }
+    }
+
     private val syncRunnable = object : Runnable {
         override fun run() {
             Thread { IncidentRepository.syncData(applicationContext) }.start()
@@ -367,6 +392,7 @@ class ScreenCaptureService : Service() {
 
     override fun onDestroy() {
         Thread { IncidentRepository.syncData(applicationContext) }.start()
+        syncRequestListener?.remove()
         handler.removeCallbacksAndMessages(null)
         removeOverlay()
         CaptureState.isRunning = false
