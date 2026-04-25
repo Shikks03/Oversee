@@ -175,12 +175,12 @@ fun PermissionsSetupScreen(checks: Map<String, Boolean>, onFixPermission: (Strin
 
 @Composable
 fun PermissionGridItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isGranted: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Card(modifier = modifier.aspectRatio(0.85f), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(modifier = Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
-            Box(modifier = Modifier.size(64.dp).background(if (isGranted) AppTheme.ChildSuccess.copy(alpha = 0.1f) else AppTheme.ChildAccentLight, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) { Icon(imageVector = icon, contentDescription = null, tint = if (isGranted) AppTheme.ChildSuccess else AppTheme.ChildAccent, modifier = Modifier.size(32.dp)) }
-            Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
-            Button(onClick = onClick, modifier = Modifier.fillMaxWidth().height(40.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isGranted) AppTheme.ChildSuccess else AppTheme.ChildAccent), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(0.dp)) {
-                Text(text = if (isGranted) "Granted" else "Enable", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+    Card(modifier = modifier.aspectRatio(0.75f), shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
+            Box(modifier = Modifier.size(60.dp).background(if (isGranted) AppTheme.ChildSuccess.copy(alpha = 0.1f) else AppTheme.ChildAccentLight, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) { Icon(imageVector = icon, contentDescription = null, tint = if (isGranted) AppTheme.ChildSuccess else AppTheme.ChildAccent, modifier = Modifier.size(30.dp)) }
+            Text(text = title, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black, textAlign = TextAlign.Center, minLines = 2, maxLines = 2, lineHeight = 18.sp)
+            Button(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isGranted) AppTheme.ChildSuccess else AppTheme.ChildAccent), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
+                Text(text = if (isGranted) "Granted" else "Enable", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
             }
         }
     }
