@@ -52,13 +52,13 @@ fun DashboardOverviewScreen(
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
-    val filteredIncidents = remember(incidents, startDate, endDate) {
+    val filteredIncidents by remember(startDate, endDate) { derivedStateOf {
         incidents.filter { it.timestamp in startDate..endDate }
-    }
+    }}
 
     val dateFormat = remember { SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()) }
-    val lastSyncTime = remember(incidents) { incidents.maxByOrNull { it.timestamp }?.timestamp }
-    val highAlertsCount = remember(incidents) { incidents.count { it.severity == "HIGH" } }
+    val lastSyncTime by remember { derivedStateOf { incidents.maxByOrNull { it.timestamp }?.timestamp } }
+    val highAlertsCount by remember { derivedStateOf { incidents.count { it.severity == "HIGH" } } }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(AppTheme.PaddingDefault).verticalScroll(rememberScrollState()),
@@ -117,7 +117,7 @@ fun DashboardOverviewScreen(
 
             // APPLIED THEME PADDING HERE FOR THE 2 SUMMARY CARDS
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppTheme.PaddingBoxes)) {
-                val peakTimeStr = remember(filteredIncidents) {
+                val peakTimeStr by remember { derivedStateOf {
                     if (filteredIncidents.isEmpty()) "N/A"
                     else {
                         val calendar = Calendar.getInstance()
@@ -131,13 +131,13 @@ fun DashboardOverviewScreen(
                         val displayHour = if (maxHour % 12 == 0) 12 else maxHour % 12
                         "$displayHour:00 $amPm"
                     }
-                }
+                }}
 
                 SummaryCard(modifier = Modifier.weight(1f), title = "Peak Activity", value = peakTimeStr, icon = Icons.Default.Schedule, onClick = onNavigateToLogs)
                 SummaryCard(modifier = Modifier.weight(1f), title = "Total Reports", value = filteredIncidents.size.toString(), icon = Icons.Default.NotificationsActive, onClick = onNavigateToLogs)
             }
 
-            val topWords = remember(filteredIncidents) { filteredIncidents.groupingBy { it.matchedWord }.eachCount().entries.sortedByDescending { it.value }.take(3) }
+            val topWords by remember { derivedStateOf { filteredIncidents.groupingBy { it.matchedWord }.eachCount().entries.sortedByDescending { it.value }.take(3) } }
             if (topWords.isNotEmpty()) {
                 Text("Top Flagged Words", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
                 Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AppTheme.Surface), border = BorderStroke(1.dp, AppTheme.Border)) {
@@ -294,7 +294,7 @@ private fun CompactHeaderRow(
 
 @Composable
 private fun RecentActivityFeed(incidents: List<FirebaseSyncManager.LogEntry>, onNavigateToLogs: () -> Unit) {
-    val top3 = remember(incidents) { incidents.sortedByDescending { it.timestamp }.take(3) }
+    val top3 = incidents.sortedByDescending { it.timestamp }.take(3)
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AppTheme.Surface), shape = RoundedCornerShape(AppTheme.CardCorner), border = BorderStroke(1.dp, AppTheme.Border)) {
         Column {
             if (top3.isEmpty()) {
