@@ -105,7 +105,17 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     LaunchedEffect(Unit) {
         val uid = AuthRepository.getUserId()
-        if (uid != null) UserRepository.initializeDeviceId(context, uid) { id -> deviceId = id }
+        if (uid != null) {
+            // Updated block
+            UserRepository.initializeDeviceId(context, uid) { id ->
+                deviceId = id
+
+                // --- NEW FIX: Force key generation and upload immediately ---
+                com.example.oversee.data.local.KeyManager.getOrCreateKey(context, id) {
+                    addToConsole("Encryption Key Ready.")
+                }
+            }
+        }
         performHealthCheck()
         addToConsole("System Initialized.")
     }

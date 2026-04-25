@@ -24,6 +24,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.BorderStroke // Add this if it's missing too
 
 import com.example.oversee.ui.components.inputs.OverSeeTextField
 import com.example.oversee.ui.theme.AppTheme
@@ -135,10 +137,26 @@ fun AuthScreen(
                         Column {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Enter the email associated with your account and we'll send an email with instructions to reset your password.",
+                                text = "Enter your email to receive a password reset link.",
                                 fontSize = 14.sp, color = Color.Gray, textAlign = TextAlign.Left, lineHeight = 20.sp,
                                 modifier = Modifier.fillMaxWidth()
                             )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            // THE ACCEPTED LOSS WARNING
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
+                                border = BorderStroke(1.dp, AppTheme.Error)
+                            ) {
+                                Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = AppTheme.Error, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = "Security Warning: For your privacy, your child's data is encrypted with your password. Resetting your password will permanently delete all historical logs. New logs will begin syncing after you log in.",
+                                        fontSize = 12.sp, color = AppTheme.Error, lineHeight = 16.sp
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
 

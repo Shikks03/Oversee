@@ -19,12 +19,22 @@ object AuthRepository {
                     if (success) {
                         LoginRateLimiter.resetAttempts(ip)
                         val uid = getUserId() ?: return@signIn
-                        UserRepository.refreshLocalProfile(context, uid) {
-                            context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
-                                .edit().remove("pending_fcm_token").apply()
-                            FcmTokenManager.refreshAndStoreToken(uid)
-                            onResult(true, null)
-                        }
+
+                        // --- FIX: Run heavy crypto math on a background thread ---
+                        Thread {
+                            val derivedKek = com.example.oversee.data.local.CryptoManager.deriveKeyEncryptionKey(pass, email)
+
+                            // Switch back to Main Thread for UI updates
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                com.example.oversee.data.local.KeyManager.sessionKek = derivedKek
+                                UserRepository.refreshLocalProfile(context, uid) {
+                                    context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+                                        .edit().remove("pending_fcm_token").apply()
+                                    FcmTokenManager.refreshAndStoreToken(uid)
+                                    onResult(true, null)
+                                }
+                            }
+                        }.start()
                     } else {
                         LoginRateLimiter.recordFailedAttempt(ip) { attemptsLeft, lockoutMsg ->
                             val msg = lockoutMsg
@@ -46,12 +56,24 @@ object AuthRepository {
                     "email" to email,
                     "created_at" to System.currentTimeMillis()
                 )
-                FirebaseUserManager.createUserProfile(uid, profile) {
-                    UserRepository.refreshLocalProfile(context, uid) {
-                        FcmTokenManager.refreshAndStoreToken(uid)
-                        onResult(true, null)
+
+                // --- FIX: Derive the KEK during Registration too! ---
+                Thread {
+                    val derivedKek = com.example.oversee.data.local.CryptoManager.deriveKeyEncryptionKey(pass, email)
+
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        com.example.oversee.data.local.KeyManager.sessionKek = derivedKek
+
+                        FirebaseUserManager.createUserProfile(uid, profile) {
+                            UserRepository.refreshLocalProfile(context, uid) {
+                                FcmTokenManager.refreshAndStoreToken(uid)
+                                onResult(true, null)
+                            }
+                        }
                     }
-                }
+                }.start()
+                // ---------------------------------------------------
+
             } else onResult(false, error)
         }
     }

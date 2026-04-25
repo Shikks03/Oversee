@@ -11,12 +11,11 @@ import javax.crypto.SecretKey
  * - Child device: generates key, stores locally, uploads to Firestore
  * - Parent device: fetches key from Firestore using child's device_id, stores locally
  *
- * Key is stored at: monitor_sessions/{device_id}/config (document), field "encryption_key"
+ * Key is stored at: monitor_sessions/{device_id} (document), field "encryption_key"
  */
 object KeyManager {
 
     private const val TAG = "KeyManager"
-    private const val PREFS_NAME = "CryptoPrefs"
     private const val KEY_LOCAL = "encryption_key"
     private const val COLLECTION_SESSIONS = "monitor_sessions"
     private const val FIELD_KEY = "encryption_key"
@@ -26,6 +25,9 @@ object KeyManager {
 
     // Single-key cache used only by the child device (getOrCreateKey)
     private var cachedKey: SecretKey? = null
+
+    // --- NEW: Holds the user's password-derived KEK for this active session ---
+    var sessionKek: SecretKey? = null
 
     /**
      * Child-device path: generates a new key if none exists anywhere.
@@ -85,9 +87,13 @@ object KeyManager {
         }
     }
 
+    // =========================================================================
+    // LOCAL HARDWARE ENCRYPTION (ANDROID X SECURITY)
+    // =========================================================================
+
     private fun loadLocalKeyForDevice(context: Context, deviceId: String): SecretKey? {
-        val encoded = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString("key_$deviceId", null) ?: return null
+        val encoded = AppPreferenceManager.getString(context, "key_$deviceId", "")
+        if (encoded.isEmpty()) return null
         return try {
             CryptoManager.keyFromBytes(Base64.decode(encoded, Base64.NO_WRAP))
         } catch (e: Exception) {
@@ -98,23 +104,17 @@ object KeyManager {
 
     private fun storeLocalKeyForDevice(context: Context, deviceId: String, key: SecretKey) {
         val encoded = Base64.encodeToString(key.encoded, Base64.NO_WRAP)
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString("key_$deviceId", encoded)
-            .apply()
+        AppPreferenceManager.saveString(context, "key_$deviceId", encoded)
     }
 
     fun storeKeyLocally(context: Context, key: SecretKey) {
         val encoded = Base64.encodeToString(key.encoded, Base64.NO_WRAP)
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY_LOCAL, encoded)
-            .apply()
+        AppPreferenceManager.saveString(context, KEY_LOCAL, encoded)
     }
 
     fun loadLocalKey(context: Context): SecretKey? {
-        val encoded = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(KEY_LOCAL, null) ?: return null
+        val encoded = AppPreferenceManager.getString(context, KEY_LOCAL, "")
+        if (encoded.isEmpty()) return null
         return try {
             val bytes = Base64.decode(encoded, Base64.NO_WRAP)
             CryptoManager.keyFromBytes(bytes)
@@ -124,12 +124,25 @@ object KeyManager {
         }
     }
 
+    // =========================================================================
+    // CLOUD ENVELOPE ENCRYPTION (ZERO-KNOWLEDGE E2EE)
+    // =========================================================================
+
     fun uploadKeyToFirestore(deviceId: String, key: SecretKey, onComplete: (Boolean) -> Unit = {}) {
-        val encoded = Base64.encodeToString(key.encoded, Base64.NO_WRAP)
+        val kek = sessionKek
+        if (kek == null) {
+            Log.e(TAG, "Cannot upload key: User KEK is missing from memory!")
+            onComplete(false)
+            return
+        }
+
+        // --- NEW: Wrap the key before upload ---
+        val safeEncryptedKey = CryptoManager.wrapChaChaKeyForCloud(key, kek)
+
         FirebaseFirestore.getInstance()
             .collection(COLLECTION_SESSIONS)
             .document(deviceId)
-            .set(mapOf(FIELD_KEY to encoded), com.google.firebase.firestore.SetOptions.merge())
+            .set(mapOf(FIELD_KEY to safeEncryptedKey), com.google.firebase.firestore.SetOptions.merge())
             .addOnSuccessListener { onComplete(true) }
             .addOnFailureListener { e ->
                 Log.e(TAG, "Failed to upload key", e)
@@ -138,6 +151,13 @@ object KeyManager {
     }
 
     fun fetchKeyFromFirestore(deviceId: String, onResult: (SecretKey?) -> Unit) {
+        val kek = sessionKek
+        if (kek == null) {
+            Log.e(TAG, "Cannot fetch key: User KEK is missing from memory!")
+            onResult(null)
+            return
+        }
+
         FirebaseFirestore.getInstance()
             .collection(COLLECTION_SESSIONS)
             .document(deviceId)
@@ -146,10 +166,10 @@ object KeyManager {
                 val encoded = doc.getString(FIELD_KEY)
                 if (encoded != null) {
                     try {
-                        val bytes = Base64.decode(encoded, Base64.NO_WRAP)
-                        onResult(CryptoManager.keyFromBytes(bytes))
+                        // --- NEW: Unwrap the downloaded key ---
+                        onResult(CryptoManager.unwrapChaChaKeyFromCloud(encoded, kek))
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to decode remote key", e)
+                        Log.e(TAG, "Failed to decode remote key (Password might have changed)", e)
                         onResult(null)
                     }
                 } else {
@@ -165,6 +185,7 @@ object KeyManager {
     /** Clears all in-memory cached keys (call on logout). */
     fun clearCache() {
         cachedKey = null
+        sessionKek = null // Wipe the KEK!
         keyCache.clear()
     }
 }
