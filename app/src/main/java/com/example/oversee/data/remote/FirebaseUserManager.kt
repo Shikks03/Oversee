@@ -46,16 +46,30 @@ object FirebaseUserManager {
             }
     }
 
-    fun fetchDeviceFidPointers(uid: String, onResult: (parentFid: String?, childFid: String?) -> Unit) {
+    fun fetchDeviceFidPointers(uid: String, onResult: (parentFid: String?, childFid: String?, childDisplayUid: String?) -> Unit) {
         db.collection("users").document(uid).get()
             .addOnSuccessListener { doc ->
                 val parentFid = doc.getString("parent_device_fid")
                 val childFid = doc.getString("child_device_fid")
-                onResult(parentFid, childFid)
+                val childDisplayUid = doc.getString("child_display_uid")
+                onResult(parentFid, childFid, childDisplayUid)
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "fetchDeviceFidPointers FAILED: uid=$uid error=${e.message}", e)
-                onResult(null, null)
+                onResult(null, null, null)
             }
+    }
+
+    fun reserveDisplayUid(uid: String, code: String, onComplete: (Boolean) -> Unit) {
+        val reservationRef = db.collection("display_uids").document(code)
+        val profileRef = db.collection("users").document(uid)
+        db.runTransaction { transaction ->
+            val snap = transaction.get(reservationRef)
+            if (snap.exists()) throw Exception("taken")
+            transaction.set(reservationRef, mapOf("uid" to uid))
+            transaction.update(profileRef, "child_display_uid", code)
+        }
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { onComplete(false) }
     }
 }
