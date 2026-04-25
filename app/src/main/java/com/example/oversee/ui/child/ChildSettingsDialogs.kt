@@ -30,7 +30,7 @@ import com.example.oversee.utils.readAssetFile
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChildSettingsDialog(
-    deviceId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
+    deviceId: String, accountId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
     onDismiss: () -> Unit, onChangePin: () -> Unit, onEditId: (String) -> Unit,
     onExitApp: () -> Unit, onDebugResetRole: () -> Unit
 ) {
@@ -59,6 +59,8 @@ fun ChildSettingsDialog(
                     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                         Column {
                             SettingsRow(icon = Icons.Rounded.Smartphone, title = "This Device ID", subtitle = deviceId, onClick = null)
+                            HorizontalDivider(color = AppTheme.ChildBackground)
+                            SettingsRow(icon = Icons.Rounded.Tag, title = "Account ID", subtitle = accountId, onClick = null)
                             HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.Rounded.Person, title = "Connected Parent", subtitle = parentName, onClick = null)
                             HorizontalDivider(color = AppTheme.ChildBackground)

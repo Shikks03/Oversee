@@ -55,8 +55,8 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
     val consoleLogs = remember { mutableStateListOf<String>() }
     val healthStates = remember { mutableStateMapOf<String, Boolean>() }
 
-    var parentName by remember { mutableStateOf(AppPreferenceManager.getString(context, "parent_name", "Unknown Parent")) }
-    var parentId by remember { mutableStateOf(AppPreferenceManager.getString(context, "parent_id", "---")) }
+    var parentName by remember { mutableStateOf(UserRepository.getLocalName(context).ifBlank { "Unknown Parent" }) }
+    var parentId by remember { mutableStateOf(AuthRepository.getUserId() ?: "---") }
     val syncPrefs = remember { context.getSharedPreferences("SyncPrefs", Context.MODE_PRIVATE) }
     var lastSyncTimestamp by remember { mutableLongStateOf(syncPrefs.getLong("last_sync_time", 0L)) }
 
@@ -115,11 +115,14 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         if (uid != null) {
             UserRepository.initializeDeviceId(context, uid) { id ->
                 deviceId = id
+                if (displayUid == "------") displayUid = DeviceRepository.toDisplayCode(id)
                 com.example.oversee.data.local.KeyManager.getOrCreateKey(context, id) {
                     addToConsole("Encryption Key Ready.")
                 }
             }
-            DeviceRepository.getOrCreateDisplayUid(uid) { uid6 -> displayUid = uid6 }
+            DeviceRepository.getOrCreateDisplayUid(uid) { uid6 ->
+                if (uid6.isNotBlank()) displayUid = uid6
+            }
         }
         performHealthCheck()
         addToConsole("System Initialized.")
@@ -216,7 +219,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
         if (showSettingsDialog) {
             ChildSettingsDialog(
-                deviceId = deviceId, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
+                deviceId = deviceId, accountId = displayUid, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
                 consoleLogs = consoleLogs,
                 onDismiss = { showSettingsDialog = false },
                 onChangePin = {
