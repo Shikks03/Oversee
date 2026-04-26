@@ -1,3 +1,5 @@
+// oversee/ui/parent/settings/SettingsScreen.kt
+
 package com.example.oversee.ui.parent.settings
 
 import androidx.compose.foundation.BorderStroke
@@ -14,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oversee.ui.theme.AppTheme
@@ -25,12 +26,8 @@ fun SettingsScreen(
     onDebugResetRole: () -> Unit,
     onSyncHistoryClick: () -> Unit,
     onEditProfileClick: () -> Unit,
-    onChangePasswordClick: () -> Unit,
-    onExportDataClick: () -> Unit,
-    onDeleteAccountClick: () -> Unit,
-    onHelpSupportClick: () -> Unit
+    onManualClick: () -> Unit
 ) {
-    // State for the Unlink Dialog Pop-up
     var showUnlinkDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -39,12 +36,9 @@ fun SettingsScreen(
     ) {
         Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
-        // 1. Account & Data
+        // 1. Account
         SettingsGroup("Account") {
             SettingsItem(Icons.Default.Person, "Edit Profile", "Change your name or email", onClick = onEditProfileClick)
-            SettingsItem(Icons.Default.VpnKey, "Change Password", "Update your security credentials", onClick = onChangePasswordClick)
-            SettingsItem(Icons.Default.Download, "Export Data", "Download a copy of your account data", onClick = onExportDataClick)
-            SettingsItem(Icons.Default.DeleteForever, "Delete Account", "Permanently delete account", isDestructive = true, onClick = onDeleteAccountClick)
             SettingsItem(Icons.Default.ExitToApp, "Log Out", "Sign out of your parent account", isDestructive = true, onClick = onLogoutClick)
         }
 
@@ -54,27 +48,18 @@ fun SettingsScreen(
             SettingsItem(Icons.Default.LinkOff, "Unlink Device", "Stop monitoring the current child device", isDestructive = true, onClick = { showUnlinkDialog = true })
         }
 
-        // 3. Security & Control
-//        SettingsGroup("Security & Control") {
-//            SettingsItem(Icons.Default.Lock, "PIN / Biometric Lock", "Require FaceID or PIN to open app", onClick = onPinLockClick)
-//            SettingsItem(Icons.Default.FormatListBulleted, "Custom Keyword List", "Add specific words you want flagged", onClick = onKeywordListClick)
-//            SettingsItem(Icons.Default.NotificationsOff, "Mute / Quiet Hours", "Pause notifications during specific times", onClick = onQuietHoursClick)
-//        }
-
-        // 4. Support & Legal
-        SettingsGroup("Support & Legal") {
-            SettingsItem(Icons.Default.HelpOutline, "Help & Contact Support", "Get help or report an issue", onClick = onHelpSupportClick)
-            SettingsItem(Icons.Default.Gavel, "Privacy Policy & Terms", "Read our data handling policies", onClick = {})
+        // 3. Support & Manual
+        SettingsGroup("Help & Information") {
+            SettingsItem(Icons.Default.MenuBook, "User Manual", "Read the complete safety guide", onClick = onManualClick)
         }
 
-        // 5. Developer
+        // 4. Developer
         SettingsGroup("Developer") {
             SettingsItem(Icons.Default.BugReport, "Reset Role Selection", "Return to Parent/Child selection", onClick = onDebugResetRole)
         }
         Spacer(Modifier.height(40.dp))
     }
 
-    // --- POP-UP DIALOG FOR UNLINKING DEVICE ---
     if (showUnlinkDialog) {
         AlertDialog(
             onDismissRequest = { showUnlinkDialog = false },
@@ -82,7 +67,7 @@ fun SettingsScreen(
             text = { Text("Are you sure you want to stop monitoring this child device? This will stop all incoming data.") },
             confirmButton = {
                 Button(
-                    onClick = { showUnlinkDialog = false /* Future: Call Unlink API */ },
+                    onClick = { showUnlinkDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Error)
                 ) { Text("Unlink") }
             },

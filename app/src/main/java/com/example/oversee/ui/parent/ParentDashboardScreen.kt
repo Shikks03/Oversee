@@ -94,21 +94,22 @@ fun ParentDashboardScreen(
                     onDebugResetRole = onDebugResetRole,
                     onSyncHistoryClick = { currentTab = 6 },
                     onEditProfileClick = { currentTab = 7 },
-                    onChangePasswordClick = { currentTab = 8 },
-                    onExportDataClick = { currentTab = 9 },
-                    onDeleteAccountClick = { currentTab = 10 },
-                    onHelpSupportClick = { currentTab = 14 }
+                    onManualClick = { currentTab = 8 }
+//                    onChangePasswordClick = { currentTab = 8 },
+//                    onExportDataClick = { currentTab = 9 },
+//                    onDeleteAccountClick = { currentTab = 10 },
+//                    onHelpSupportClick = { currentTab = 14 }
                 )
                 // Settings Sub-Routes
                 6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefresh)
                 7 -> EditProfileScreen(onBackClick = { currentTab = 3 })
-                8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
-                9 -> ExportDataScreen(onBackClick = { currentTab = 3 })
-                10 -> DeleteAccountScreen(onBackClick = { currentTab = 3 })
+//                8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
+//                9 -> ExportDataScreen(onBackClick = { currentTab = 3 })
+//                10 -> DeleteAccountScreen(onBackClick = { currentTab = 3 })
 //                11 -> PinLockScreen(onBackClick = { currentTab = 3 })
 //                12 -> CustomKeywordScreen(onBackClick = { currentTab = 3 })
 //                13 -> QuietHoursScreen(onBackClick = { currentTab = 3 })
-                14 -> HelpSupportScreen(onBackClick = { currentTab = 3 })
+                8 -> HelpSupportScreen(onBackClick = { currentTab = 3 })
             }
         }
 

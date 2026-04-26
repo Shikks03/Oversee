@@ -169,57 +169,27 @@ fun EditProfileScreen(onBackClick: () -> Unit) {
 }
 
 // --- 2. Change Password ---
-@Composable
-fun ChangePasswordScreen(onBackClick: () -> Unit) {
-    var current by remember { mutableStateOf("") }
-    var newPass by remember { mutableStateOf("") }
-
-    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
-        SettingsTopBar("Change Password", onBackClick)
-        Column(modifier = Modifier.padding(AppTheme.PaddingDefault), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Column {
-                // UPDATED
-                OverSeeTextField(value = current, onValueChange = { current = it }, label = "Current Password", visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-                TextButton(onClick = { /* TODO: Forgot Password API */ }, modifier = Modifier.align(Alignment.End)) {
-                    Text("Forgot Password?", color = AppTheme.Primary, fontWeight = FontWeight.Bold)
-                }
-            }
-            // UPDATED
-            OverSeeTextField(value = newPass, onValueChange = { newPass = it }, label = "New Password", visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
-            Button(onClick = onBackClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp)) { Text("Update Password") }
-        }
-    }
-}
-
-// --- 3. Export Data ---
-@Composable
-fun ExportDataScreen(onBackClick: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
-        SettingsTopBar("Export Data", onBackClick)
-        Column(modifier = Modifier.padding(AppTheme.PaddingDefault), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("Download a copy of all incident logs and analytics.", color = Color.Gray)
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp)) { Text("Export as CSV") }
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp), colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)) { Text("Export as PDF") }
-        }
-    }
-}
-
-// --- 4. Delete Account ---
-@Composable
-fun DeleteAccountScreen(onBackClick: () -> Unit) {
-    var confirmation by remember { mutableStateOf("") }
-    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
-        SettingsTopBar("Delete Account", onBackClick)
-        Column(modifier = Modifier.padding(AppTheme.PaddingDefault), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), border = BorderStroke(1.dp, AppTheme.Error)) {
-                Text("Warning: This action is permanent and will delete all child monitoring data.", color = AppTheme.Error, modifier = Modifier.padding(16.dp), fontWeight = FontWeight.Bold)
-            }
-            // UPDATED
-            OverSeeTextField(value = confirmation, onValueChange = { confirmation = it }, label = "Type 'DELETE' to confirm", modifier = Modifier.fillMaxWidth())
-            Button(onClick = {}, enabled = confirmation == "DELETE", modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Error), shape = RoundedCornerShape(12.dp)) { Text("Permanently Delete Account") }
-        }
-    }
-}
+//@Composable
+//fun ChangePasswordScreen(onBackClick: () -> Unit) {
+//    var current by remember { mutableStateOf("") }
+//    var newPass by remember { mutableStateOf("") }
+//
+//    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
+//        SettingsTopBar("Change Password", onBackClick)
+//        Column(modifier = Modifier.padding(AppTheme.PaddingDefault), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+//            Column {
+//                // UPDATED
+//                OverSeeTextField(value = current, onValueChange = { current = it }, label = "Current Password", visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+//                TextButton(onClick = { /* TODO: Forgot Password API */ }, modifier = Modifier.align(Alignment.End)) {
+//                    Text("Forgot Password?", color = AppTheme.Primary, fontWeight = FontWeight.Bold)
+//                }
+//            }
+//            // UPDATED
+//            OverSeeTextField(value = newPass, onValueChange = { newPass = it }, label = "New Password", visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+//            Button(onClick = onBackClick, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp)) { Text("Update Password") }
+//        }
+//    }
+//}
 
 
 // --- 8. Help & Support ---
@@ -254,19 +224,6 @@ fun HelpSupportScreen(onBackClick: () -> Unit) {
                     color = Color.DarkGray
                 )
             }
-
-            // Add a contact button at the bottom since we removed FAQ
-            Button(
-                onClick = { /* Intent to email support */ },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary)
-            ) {
-                Icon(Icons.Default.Email, null)
-                Spacer(Modifier.width(8.dp))
-                Text("Contact Support")
-            }
-
-            Spacer(Modifier.height(40.dp))
         }
     }
 }

@@ -160,13 +160,13 @@ fun AppRouter() {
                         }
                     }
                 },
-                onResetPassword = { email ->
-                    if (email.isBlank()) {
-                        Toast.makeText(context, "Please enter your email address", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "Reset link sent to $email", Toast.LENGTH_LONG).show()
-                    }
-                }
+//                onResetPassword = { email ->
+//                    if (email.isBlank()) {
+//                        Toast.makeText(context, "Please enter your email address", Toast.LENGTH_SHORT).show()
+//                    } else {
+//                        Toast.makeText(context, "Reset link sent to $email", Toast.LENGTH_LONG).show()
+//                    }
+//                }
             )
         }
 

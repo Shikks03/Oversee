@@ -1,78 +1,76 @@
-# OverSee User Manual: Family Digital Safety
+OVERSEE USER MANUAL: FAMILY DIGITAL SAFETY
 
-OverSee is a parental monitoring application designed to provide digital safety for children by monitoring activity on social media platforms like **Facebook** and **Instagram**. It uses advanced text analysis and end-to-end encryption to alert parents to inappropriate content while maintaining strict data privacy.
+OverSee is a parental monitoring application designed to provide digital safety for children by monitoring activity on social media platforms like Facebook and Instagram. It uses advanced text analysis and end-to-end encryption to alert parents to inappropriate content while maintaining strict data privacy.
 
----
+--------------------------------------------------
 
-## 1. Getting Started
+1. GETTING STARTED
 
-### Account Creation
-1.  **Register**: Open the app and select **Sign Up**. Enter your name, email, and a secure password.
-2.  **Terms of Service**: You must review and accept the Privacy Policy and User Agreement, which outlines how your family's data is encrypted and handled.
-3.  **Security Warning**: Your password is the key to your child's encrypted data. **If you reset your password, all historical logs will be permanently deleted** for privacy reasons.
+Account Creation
+• Register: Open the app and select Sign Up. Enter your name, email, and a secure password.
+• Terms of Service: You must review and accept the Privacy Policy and User Agreement, which outlines how your family's data is encrypted and handled.
 
-### Role Selection
+Role Selection
 After logging in, you must designate the device's role:
-* **Parent Device**: Used to monitor activity, manage settings, and receive alerts.
-* **Child Device**: Used for background monitoring and protection on the child's phone.
+• Parent Device: Used to monitor activity, manage settings, and receive alerts.
+• Child Device: Used for background monitoring and protection on the child's phone.
 
----
+--------------------------------------------------
 
-## 2. Setting Up the Child Device
+2. SETTING UP THE CHILD DEVICE
 
 To begin monitoring, the child's device requires specific permissions and a secure link to the parent account.
 
-### Linking the Devices
-1.  **Obtain ID**: On the Child Device, a unique **6-digit ID** will be displayed.
-2.  **Enter ID**: On the Parent Device, navigate to the **Overview** tab and select **Link Child Device**. Enter the 6-digit ID shown on the child's phone.
-3.  **Transferring Devices**: If you link a new child device to an existing account, the app will prompt you to transfer the link and securely delete old logs from the previous device.
+Linking the Devices
+• Obtain ID: On the Child Device, a unique 6-digit ID will be displayed.
+• Enter ID: On the Parent Device, navigate to the Overview tab and select Link Child Device. Enter the 6-digit ID shown on the child's phone.
+• Transferring Devices: If you link a new child device to an existing account, the app will prompt you to transfer the link and securely delete old logs from the previous device.
 
-### Required Permissions
-For monitoring to function, the following must be enabled on the child's device via the **Service Status** indicators:
-* **Accessibility**: Allows the app to detect when Facebook or Instagram is opened.
-* **Overlay**: Enables the app to display security warnings or block access during "Penalty Timeouts".
-* **Screen Capture**: Required for the app to analyze text on the screen for safety.
-* **Notifications & Internet**: Necessary for syncing data and sending alerts to the parent.
+Required Permissions
+For monitoring to function, the following must be enabled on the child's device via the Service Status indicators:
+• Accessibility: Allows the app to detect when Facebook or Instagram is opened.
+• Overlay: Enables the app to display security warnings or block access during Penalty Timeouts.
+• Screen Capture: Required for the app to analyze text on the screen for safety.
+• Notifications & Internet: Necessary for syncing data and sending alerts to the parent.
 
-### Child Dashboard & Smart PIN
-* **Smart PIN**: During setup, you must create a **4-digit PIN**. This PIN is required to access the Child Dashboard or change settings on the child's phone, preventing unauthorized tampering.
-* **Status Check**: If any service icon on the Child Dashboard turns **Red**, tap it to be taken directly to the system settings to fix the permission.
+Child Dashboard & Smart PIN
+• Smart PIN: During setup, you must create a 4-digit PIN. This PIN is required to access the Child Dashboard or change settings on the child's phone, preventing unauthorized tampering.
+• Status Check: If any service icon on the Child Dashboard turns Red, tap it to be taken directly to the system settings to fix the permission.
 
----
+--------------------------------------------------
 
-## 3. Parent Dashboard Features
+3. PARENT DASHBOARD FEATURES
 
-### Overview Tab
-* **Activity Trend**: A visual chart showing incident frequency over the selected date range.
-* **Summary Cards**: Quickly view "Peak Activity" times and the total number of reports.
-* **Top Flagged Words**: See the most frequently detected inappropriate words.
+Overview Tab
+• Activity Trend: A visual chart showing incident frequency over the selected date range.
+• Summary Cards: Quickly view Peak Activity times and the total number of reports.
+• Top Flagged Words: See the most frequently detected inappropriate words.
 
-### Daily Insights
-* **Activity Heatmap**: A timeline showing exactly when incidents occurred throughout the day.
-* **Detected Content**: A list of specific incidents for the day, sorted by severity.
+Daily Insights
+• Activity Heatmap: A timeline showing exactly when incidents occurred throughout the day.
+• Detected Content: A list of specific incidents for the day, sorted by severity.
 
-### Incident History (Logs)
-* **Detailed Records**: View the **Raw Word** detected, the **Matched Word** (what the system identified it as), the **App** it was found in, and the exact **Time**.
-* **Severity Levels**: Incidents are categorized as **Low**, **Medium**, or **High** risk.
+Incident History (Logs)
+• Detailed Records: View the Raw Word detected, the Matched Word (what the system identified it as), the App it was found in, and the exact Time.
+• Severity Levels: Incidents are categorized as Low, Medium, or High risk.
 
----
+--------------------------------------------------
 
-## 4. Safety Mechanisms
+4. SAFETY MECHANISMS
 
-### Automated Alerts
-When a **High Severity** incident is detected, the app performs the following:
-1.  **Instant Sync**: Immediately uploads the log to the parent's dashboard.
-2.  **Push Notification**: Sends an emergency alert to the parent's phone.
+Automated Alerts
+When a High Severity incident is detected, the app performs the following:
+• Instant Sync: Immediately uploads the log to the parent's dashboard.
+• Push Notification: Sends an emergency alert to the parent's phone.
 
-### Penalty Timeouts
-If the system detects a "High-Risk Burst" (too many flags in a short period), it may trigger a **Penalty Timeout**.
-* The child will be blocked from the monitored app (e.g., Facebook) for a set duration (default is 5 minutes).
-* A countdown timer will appear on the child's screen. They must wait for the timer to end or exit the app.
+Penalty Timeouts
+If the system detects a High-Risk Burst (too many flags in a short period), it may trigger a Penalty Timeout.
+• The child will be blocked from the monitored app (e.g., Facebook) for a set duration (default is 5 minutes).
+• A countdown timer will appear on the child's screen. They must wait for the timer to end or exit the app.
 
----
+--------------------------------------------------
 
-## 5. Security & Privacy
+5. SECURITY & PRIVACY
 
-* **End-to-End Encryption (E2EE)**: All monitoring data is encrypted directly on the child's device using a unique key before being sent to the cloud.
-* **Zero-Knowledge**: Because the data is encrypted with your account password, **OverSee employees cannot read your child's logs**.
-* **Data Control**: Parents can export all data as a CSV/PDF or permanently delete the account and all associated logs at any time.
+• End-to-End Encryption (E2EE): All monitoring data is encrypted directly on the child's device using a unique key before being sent to the cloud.
+• Zero-Knowledge: Because the data is encrypted with your account password, OverSee employees cannot read your child's logs.
