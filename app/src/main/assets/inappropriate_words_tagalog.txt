@@ -1,5 +1,6 @@
 amputa
 animal ka
+bastos
 bilat
 binibrocha
 bobo
@@ -15,6 +16,7 @@ etits
 gaga
 gagi
 gago
+hayop
 hayop ka
 hayup
 hinampak
