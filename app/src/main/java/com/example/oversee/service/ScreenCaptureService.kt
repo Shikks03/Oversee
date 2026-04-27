@@ -195,7 +195,7 @@ class ScreenCaptureService : Service() {
         textRecognizer.process(image)
             .addOnSuccessListener { visionText ->
                 val duration = System.currentTimeMillis() - startTime
-                Log.d(TAG, "ML Kit OCR #$id (${duration}ms) - Length: ${visionText.text.length}")
+                Log.d(TAG, "ML Kit OCR #$id (${duration}ms) - Length: ${visionText.text.length}\nScanned Text:\n${visionText.text}")
 
                 if (visionText.text.isNotBlank()) {
                     val analysisResult = textAnalysisEngine.analyze(visionText.text)
