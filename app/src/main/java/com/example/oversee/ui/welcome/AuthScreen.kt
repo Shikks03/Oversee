@@ -34,7 +34,8 @@ enum class AuthMode { SIGN_IN, SIGN_UP }
 @Composable
 fun AuthScreen(
     onSignIn: (String, String) -> Unit,
-    onSignUp: (String, String, String, String) -> Unit
+    onSignUp: (String, String, String, String) -> Unit,
+    isLoading: Boolean = false
 ) {
     var authMode by remember { mutableStateOf(AuthMode.SIGN_IN) }
 
@@ -156,16 +157,33 @@ fun AuthScreen(
 
                     Button(
                         onClick = {
-                            if (authMode == AuthMode.SIGN_IN) onSignIn(email, password)
-                            else onSignUp(name, email, password, confirmPassword)
+                            if (!isLoading) {
+                                if (authMode == AuthMode.SIGN_IN) onSignIn(email, password)
+                                else onSignUp(name, email, password, confirmPassword)
+                            }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary)
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary),
+                        enabled = !isLoading
                     ) {
-                        Text(
-                            text = if (authMode == AuthMode.SIGN_IN) "Sign In" else "Create Account",
-                            fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White
-                        )
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (authMode == AuthMode.SIGN_IN) "Signing in..." else "Creating account...",
+                                fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White
+                            )
+                        } else {
+                            Text(
+                                text = if (authMode == AuthMode.SIGN_IN) "Sign In" else "Create Account",
+                                fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))

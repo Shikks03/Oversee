@@ -129,12 +129,17 @@ fun AppRouter() {
                 if (targetState.destination.route == "role_selection") fadeOut(tween(500)) else null
             }
         ) {
+            var isAuthLoading by remember { mutableStateOf(false) }
+
             AuthScreen(
+                isLoading = isAuthLoading,
                 onSignIn = { email, pass ->
                     if (email.isBlank() || pass.isBlank()) {
                         Toast.makeText(context, "Please enter email and password", Toast.LENGTH_SHORT).show()
                     } else {
+                        isAuthLoading = true
                         AuthRepository.signIn(context, email, pass) { success, error ->
+                            isAuthLoading = false
                             if (success) {
                                 userName = UserRepository.getLocalName(context)
                                 navController.navigate("role_selection") { popUpTo("auth") { inclusive = true } }
@@ -150,7 +155,9 @@ fun AppRouter() {
                     } else if (pass != confirmPass) {
                         Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
                     } else {
+                        isAuthLoading = true
                         AuthRepository.register(context, name, email, pass) { success, error ->
+                            isAuthLoading = false
                             if (success) {
                                 userName = UserRepository.getLocalName(context)
                                 navController.navigate("role_selection") { popUpTo("auth") { inclusive = true } }
