@@ -105,14 +105,14 @@ fun ParentDashboardScreen(
                     onLogoutClick = { showLogoutDialog = true },
                     onDebugResetRole = onDebugResetRole,
                     onSyncHistoryClick = { currentTab = 6 },
-                    onChangePasswordClick = { currentTab = 8 },
-                    onDeleteAccountClick = { currentTab = 10 },
+                    onChangePasswordClick = {},
+                    onDeleteAccountClick = {},
                     onHelpSupportClick = { currentTab = 14 }
                 )
                 // Settings Sub-Routes
                 6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefreshAndExtendRange)
-                8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
-                10 -> DeleteAccountScreen(onBackClick = { currentTab = 3 })
+//                8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
+//                10 -> DeleteAccountScreen(onBackClick = { currentTab = 3 })
 //                11 -> PinLockScreen(onBackClick = { currentTab = 3 })
 //                12 -> CustomKeywordScreen(onBackClick = { currentTab = 3 })
 //                13 -> QuietHoursScreen(onBackClick = { currentTab = 3 })

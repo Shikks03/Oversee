@@ -65,7 +65,8 @@ object AppPreferenceManager {
     }
 
     fun clearAll(context: Context) {
-        getPrefs(context).edit { clear() }
+        encryptedPrefs = null
+        context.deleteSharedPreferences(PREFS_NAME)
     }
 
     fun migrateStaleKeys(context: Context) {
