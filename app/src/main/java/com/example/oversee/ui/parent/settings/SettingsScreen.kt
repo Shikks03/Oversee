@@ -28,7 +28,8 @@ fun SettingsScreen(
     onSyncHistoryClick: () -> Unit,
     onChangePasswordClick: () -> Unit,
     onDeleteAccountClick: () -> Unit,
-    onHelpSupportClick: () -> Unit
+    onHelpSupportClick: () -> Unit,
+    onPrivacyPolicyClick: () -> Unit = {}
 ) {
     var showUnlinkDialog by remember { mutableStateOf(false) }
 
@@ -61,7 +62,7 @@ fun SettingsScreen(
         // 4. Support & Legal
         SettingsGroup("Support & Legal") {
             SettingsItem(Icons.AutoMirrored.Filled.HelpOutline, "Help & Contact Support", "Get help or report an issue", onClick = onHelpSupportClick)
-            SettingsItem(Icons.Default.Gavel, "Privacy Policy & Terms", "Read our data handling policies", onClick = {})
+            SettingsItem(Icons.Default.Gavel, "Privacy Policy & Terms", "Read our data handling policies", onClick = onPrivacyPolicyClick)
         }
 
         // 5. Developer

@@ -67,7 +67,7 @@ fun ParentDashboardScreen(
 
     BackHandler(enabled = currentTab != 0) {
         currentTab = when (currentTab) {
-            in 6..14 -> 3
+            in 6..15 -> 3
             5 -> 0
             else -> 0
         }
@@ -78,7 +78,7 @@ fun ParentDashboardScreen(
             ParentTabs(
                 currentTab = when(currentTab) {
                     5 -> 0
-                    in 6..14 -> 3
+                    in 6..15 -> 3
                     else -> currentTab
                 },
                 onTabSelected = { currentTab = it }
@@ -107,7 +107,8 @@ fun ParentDashboardScreen(
                     onSyncHistoryClick = { currentTab = 6 },
                     onChangePasswordClick = {},
                     onDeleteAccountClick = {},
-                    onHelpSupportClick = { currentTab = 14 }
+                    onHelpSupportClick = { currentTab = 14 },
+                    onPrivacyPolicyClick = { currentTab = 15 }
                 )
                 // Settings Sub-Routes
                 6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefreshAndExtendRange)
@@ -117,6 +118,7 @@ fun ParentDashboardScreen(
 //                12 -> CustomKeywordScreen(onBackClick = { currentTab = 3 })
 //                13 -> QuietHoursScreen(onBackClick = { currentTab = 3 })
                 14 -> HelpSupportScreen(onBackClick = { currentTab = 3 })
+                15 -> PrivacyPolicyScreen(onBackClick = { currentTab = 3 })
             }
         }
 

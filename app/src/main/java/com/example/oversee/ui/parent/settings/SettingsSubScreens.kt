@@ -193,6 +193,34 @@ fun EditProfileScreen(onBackClick: () -> Unit) {
 //}
 
 
+// --- 7. Privacy Policy & Terms ---
+@Composable
+fun PrivacyPolicyScreen(onBackClick: () -> Unit) {
+    val context = LocalContext.current
+    val termsContent = remember { context.readAssetFile("terms_conditions.txt") }
+
+    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
+        SettingsTopBar("Privacy Policy & Terms", onBackClick)
+        Card(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = AppTheme.PaddingDefault)
+                .padding(bottom = AppTheme.PaddingDefault),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = AppTheme.Surface),
+            border = BorderStroke(1.dp, AppTheme.Border)
+        ) {
+            Text(
+                text = termsContent,
+                modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
+                fontSize = 14.sp,
+                color = Color.DarkGray,
+                lineHeight = 22.sp
+            )
+        }
+    }
+}
+
 // --- 8. Help & Support ---
 @Composable
 fun HelpSupportScreen(onBackClick: () -> Unit) {
