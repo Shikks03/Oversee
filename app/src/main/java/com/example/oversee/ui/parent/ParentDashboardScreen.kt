@@ -105,8 +105,6 @@ fun ParentDashboardScreen(
                     onLogoutClick = { showLogoutDialog = true },
                     onDebugResetRole = onDebugResetRole,
                     onSyncHistoryClick = { currentTab = 6 },
-                    onChangePasswordClick = {},
-                    onDeleteAccountClick = {},
                     onHelpSupportClick = { currentTab = 14 },
                     onPrivacyPolicyClick = { currentTab = 15 }
                 )

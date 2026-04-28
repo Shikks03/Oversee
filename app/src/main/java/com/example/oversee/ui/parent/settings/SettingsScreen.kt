@@ -26,8 +26,6 @@ fun SettingsScreen(
     onLogoutClick: () -> Unit,
     onDebugResetRole: () -> Unit,
     onSyncHistoryClick: () -> Unit,
-    onChangePasswordClick: () -> Unit,
-    onDeleteAccountClick: () -> Unit,
     onHelpSupportClick: () -> Unit,
     onPrivacyPolicyClick: () -> Unit = {}
 ) {
@@ -41,8 +39,6 @@ fun SettingsScreen(
 
         // 1. Account & Data
         SettingsGroup("Account") {
-            SettingsItem(Icons.Default.VpnKey, "Change Password", "Update your security credentials", onClick = onChangePasswordClick)
-            SettingsItem(Icons.Default.DeleteForever, "Delete Account", "Permanently delete account", isDestructive = true, onClick = onDeleteAccountClick)
             SettingsItem(Icons.AutoMirrored.Filled.ExitToApp, "Log Out", "Sign out of your parent account", isDestructive = true, onClick = onLogoutClick)
         }
 
