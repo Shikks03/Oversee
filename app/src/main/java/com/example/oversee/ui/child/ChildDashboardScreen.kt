@@ -215,7 +215,8 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                     showSettingsDialog = false
                 },
                 onExitApp = onExitApp,
-                onDebugResetRole = onDebugResetRole
+                onDebugResetRole = onDebugResetRole,
+                onLogout = onLogoutClick
             )
         }
     }

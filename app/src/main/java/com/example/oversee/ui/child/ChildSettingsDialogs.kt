@@ -33,7 +33,7 @@ import com.example.oversee.utils.readAssetFile
 fun ChildSettingsDialog(
     deviceId: String, accountId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
     onDismiss: () -> Unit, onChangePin: () -> Unit,
-    onExitApp: () -> Unit, onDebugResetRole: () -> Unit
+    onExitApp: () -> Unit, onDebugResetRole: () -> Unit, onLogout: () -> Unit
 ) {
     var showManual by remember { mutableStateOf(false) }
     var showSyncHistory by remember { mutableStateOf(false) }
@@ -108,6 +108,8 @@ fun ChildSettingsDialog(
                             SettingsRow(icon = Icons.Rounded.LockReset, title = "Change PIN", onClick = onChangePin)
                             HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.AutoMirrored.Rounded.ExitToApp, title = "Lock & Exit Dashboard", onClick = onExitApp, isDestructive = true)
+                            HorizontalDivider(color = AppTheme.ChildBackground)
+                            SettingsRow(icon = Icons.Rounded.Logout, title = "Log Out", onClick = onLogout, isDestructive = true)
                         }
                     }
                 }
@@ -203,6 +205,7 @@ fun SettingsRow(
 @Composable
 fun MonitoringRulesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
+    var timeoutEnabled by remember { mutableStateOf(AppPreferenceManager.getBoolean(context, "timeout_enabled", true)) }
     var blockDuration by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "block_duration_mins", 5L)) }
     var burstThreshold by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "burst_threshold", 50L)) }
 
@@ -219,16 +222,40 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
         ) { padding ->
             Column(modifier = Modifier.padding(padding).fillMaxSize().padding(24.dp)) {
 
+                // --- SECTION 0: TIMEOUT TOGGLE ---
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Penalty Timeout", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
+                            Text("Block the app when a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
+                        }
+                        Switch(
+                            checked = timeoutEnabled,
+                            onCheckedChange = {
+                                timeoutEnabled = it
+                                AppPreferenceManager.saveBoolean(context, "timeout_enabled", it)
+                            }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
                 // --- SECTION 1: TIMEOUT DURATION ---
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Text("Penalty Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
+                        Text("Penalty Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
                         Text("Time blocked after a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
 
                         Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                             listOf(1L, 5L, 15L, 30L).forEach { mins ->
                                 FilterChip(
                                     selected = blockDuration == mins,
+                                    enabled = timeoutEnabled,
                                     onClick = {
                                         blockDuration = mins
                                         AppPreferenceManager.saveLong(context, "block_duration_mins", mins)
