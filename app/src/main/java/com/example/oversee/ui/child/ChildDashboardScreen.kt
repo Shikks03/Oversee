@@ -32,6 +32,8 @@ import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.remote.FirebaseSyncManager
+import com.example.oversee.service.OverlayService
+import com.example.oversee.service.ScreenCaptureService
 import com.example.oversee.ui.components.inputs.OverSeePinPad
 import com.example.oversee.ui.theme.AppTheme
 import com.example.oversee.utils.SystemHealthManager
@@ -66,6 +68,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var monitoringEnabled by remember { mutableStateOf(AppPreferenceManager.getBoolean(context, "monitoring_enabled", true)) }
 
     // --- PIN STATE ---
     var savedChildPin by remember { mutableStateOf(AppPreferenceManager.getString(context, "child_pin", "")) }
@@ -194,6 +197,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         ChildDashboardScreen(
             deviceId = deviceId, parentName = parentName, checks = healthStates,
             isRefreshing = isRefreshing, lastSyncedTime = lastSyncedTime, onForceSync = triggerSync,
+            monitoringEnabled = monitoringEnabled,
             onFixPermission = { SystemHealthManager.navigateToSetting(context, it) },
             onSettingsClick = { showSettingsDialog = true },
             onInfoClick = { showInfoDialog = true }
@@ -208,10 +212,24 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
             ChildSettingsDialog(
                 deviceId = deviceId, accountId = displayUid, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
                 consoleLogs = consoleLogs,
+                monitoringEnabled = monitoringEnabled,
                 onDismiss = { showSettingsDialog = false },
                 onChangePin = {
                     AppPreferenceManager.saveString(context, "child_pin", "")
                     savedChildPin = ""
+                    showSettingsDialog = false
+                },
+                onKillSwitch = { enabled ->
+                    AppPreferenceManager.saveBoolean(context, "monitoring_enabled", enabled)
+                    monitoringEnabled = enabled
+                    if (!enabled) {
+                        context.stopService(android.content.Intent(context, ScreenCaptureService::class.java))
+                        context.stopService(android.content.Intent(context, OverlayService::class.java))
+                        addToConsole("Kill Switch: Monitoring disabled. All services stopped.")
+                    } else {
+                        addToConsole("Kill Switch: Monitoring re-enabled.")
+                    }
+                    performHealthCheck()
                     showSettingsDialog = false
                 },
                 onExitApp = onExitApp,
@@ -230,15 +248,21 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 fun ChildDashboardScreen(
     deviceId: String, parentName: String, checks: Map<String, Boolean>,
     isRefreshing: Boolean, lastSyncedTime: String, onForceSync: () -> Unit,
+    monitoringEnabled: Boolean = true,
     onFixPermission: (String) -> Unit, onSettingsClick: () -> Unit, onInfoClick: () -> Unit
 ) {
-    val isSystemActive = checks["Accessibility"] == true &&
+    val isSystemActive = monitoringEnabled &&
+            checks["Accessibility"] == true &&
             checks["Notifications"] == true &&
             checks["Overlay"] == true &&
             checks["Internet"] == true &&
             checks["Firebase"] == true
 
-    val topHalfColor = if (isSystemActive) AppTheme.ChildSuccess else AppTheme.ChildError
+    val topHalfColor = when {
+        !monitoringEnabled -> Color(0xFF607D8B)
+        isSystemActive -> AppTheme.ChildSuccess
+        else -> AppTheme.ChildError
+    }
 
     Box(modifier = Modifier.fillMaxSize().background(topHalfColor)) {
 
@@ -279,29 +303,39 @@ fun ChildDashboardScreen(
                     .padding(8.dp),
                 contentAlignment = Alignment.Center
             ){
-                if (isSystemActive) {
-                    Icon(Icons.Rounded.VerifiedUser, contentDescription = "System Ready", tint = AppTheme.ChildSuccess, modifier = Modifier.size(100.dp))
-                } else {
-                    Icon(Icons.Rounded.Shield, contentDescription = "Action Required", tint = AppTheme.ChildError, modifier = Modifier.size(100.dp))
+                when {
+                    !monitoringEnabled -> Icon(Icons.Rounded.Block, contentDescription = "Monitoring Disabled", tint = Color(0xFF607D8B), modifier = Modifier.size(100.dp))
+                    isSystemActive -> Icon(Icons.Rounded.VerifiedUser, contentDescription = "System Ready", tint = AppTheme.ChildSuccess, modifier = Modifier.size(100.dp))
+                    else -> Icon(Icons.Rounded.Shield, contentDescription = "Action Required", tint = AppTheme.ChildError, modifier = Modifier.size(100.dp))
                 }
             }
 
             Spacer(Modifier.height(32.dp))
 
             Text(
-                text = if (isSystemActive) "System Active" else "Action Required",
+                text = when {
+                    !monitoringEnabled -> "Monitoring Disabled"
+                    isSystemActive -> "System Active"
+                    else -> "Action Required"
+                },
                 fontSize = 32.sp,
                 fontWeight = FontWeight.ExtraBold,
-                color = Color.White
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = if (isSystemActive) "All background services are running securely." else "Important permissions are missing or disabled.",
+                text = when {
+                    !monitoringEnabled -> "Oversee is not actively monitoring this device."
+                    isSystemActive -> "All background services are running securely."
+                    else -> "Important permissions are missing or disabled."
+                },
                 fontSize = 15.sp,
                 color = Color.White.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center,
                 lineHeight = 22.sp,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
             )
 
             Spacer(Modifier.height(24.dp))

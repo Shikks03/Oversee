@@ -32,13 +32,16 @@ import com.example.oversee.utils.readAssetFile
 @Composable
 fun ChildSettingsDialog(
     deviceId: String, accountId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
+    monitoringEnabled: Boolean,
     onDismiss: () -> Unit, onChangePin: () -> Unit,
+    onKillSwitch: (Boolean) -> Unit,
     onExitApp: () -> Unit, onDebugResetRole: () -> Unit, onLogout: () -> Unit
 ) {
     var showManual by remember { mutableStateOf(false) }
     var showSyncHistory by remember { mutableStateOf(false) }
     var showActivityConsole by remember { mutableStateOf(false) }
     var showMonitoringRules by remember { mutableStateOf(false) }
+    var showDisableConfirm by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
@@ -100,6 +103,50 @@ fun ChildSettingsDialog(
 
                 item { Spacer(Modifier.height(8.dp)) }
 
+                // --- KILL SWITCH ---
+                item { Text("Monitoring Control", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.ChildAccent, modifier = Modifier.padding(start = 8.dp)) }
+                item {
+                    Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(
+                                    Icons.Rounded.Shield,
+                                    contentDescription = null,
+                                    tint = if (monitoringEnabled) AppTheme.ChildAccent else AppTheme.ChildError,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(Modifier.width(16.dp))
+                                Column {
+                                    Text(
+                                        if (monitoringEnabled) "Monitoring Active" else "Monitoring Disabled",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (monitoringEnabled) Color.Black else AppTheme.ChildError
+                                    )
+                                    Text(
+                                        if (monitoringEnabled) "Oversee is actively protecting this device." else "All background services are paused.",
+                                        fontSize = 12.sp,
+                                        color = AppTheme.ChildTextSecondary
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = monitoringEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (!enabled) showDisableConfirm = true
+                                    else onKillSwitch(true)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                item { Spacer(Modifier.height(8.dp)) }
+
                 // --- SECURITY ---
                 item { Text("Security", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppTheme.ChildAccent, modifier = Modifier.padding(start = 8.dp)) }
                 item {
@@ -142,6 +189,21 @@ fun ChildSettingsDialog(
                 }
             }
         }
+    }
+
+    if (showDisableConfirm) {
+        OverSeeDialog(
+            title = "Disable Monitoring?",
+            description = "This will stop all background services. Oversee will no longer monitor app activity on this device until re-enabled.",
+            confirmText = "Disable",
+            dismissText = "Cancel",
+            isDestructive = true,
+            onConfirm = {
+                showDisableConfirm = false
+                onKillSwitch(false)
+            },
+            onDismiss = { showDisableConfirm = false }
+        )
     }
 
     if (showMonitoringRules) MonitoringRulesDialog(onDismiss = { showMonitoringRules = false })

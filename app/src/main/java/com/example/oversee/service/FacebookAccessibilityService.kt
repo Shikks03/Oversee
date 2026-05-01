@@ -14,6 +14,8 @@ class FacebookAccessibilityService : AccessibilityService() {
     private val TAG = "AppMonitorAccess"
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (!AppPreferenceManager.getBoolean(this, "monitoring_enabled", true)) return
+
         val eventType = event?.eventType
         if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
             eventType == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
