@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -45,6 +47,7 @@ import com.example.oversee.ui.theme.AppTheme
 import com.example.oversee.ui.welcome.AuthScreen
 import com.example.oversee.ui.welcome.RoleSelectionScreen
 import com.example.oversee.ui.welcome.TermsAndPrivacyScreen
+import com.example.oversee.utils.NetworkUtils
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,7 +77,11 @@ fun AppRouter() {
 
         // 1. SPLASH / LOADING ROUTE
         composable("splash") {
-            LaunchedEffect(Unit) {
+            var splashError by remember { mutableStateOf<String?>(null) }
+            var retryKey by remember { mutableStateOf(0) }
+
+            LaunchedEffect(retryKey) {
+                splashError = null
                 val termsAccepted = AppPreferenceManager.getBoolean(context, "terms_accepted", false)
 
                 if (!termsAccepted) {
@@ -83,17 +90,22 @@ fun AppRouter() {
                     if (AuthRepository.isUserLoggedIn()) {
                         val uid = AuthRepository.getUserId()
                         if (uid != null) {
+                            if (!NetworkUtils.isAvailable(context)) {
+                                splashError = "No internet connection"
+                                return@LaunchedEffect
+                            }
                             com.example.oversee.data.local.KeyManager.restoreSession(context)
-
+                            val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
+                                splashError = "Request timed out. Please check your connection and try again."
+                            }
                             UserRepository.refreshLocalProfile(context, uid) {
+                                cancelTimeout()
+                                if (splashError != null) return@refreshLocalProfile
                                 val role = UserRepository.getLocalRole(context)
                                 userName = UserRepository.getLocalName(context)
                                 when (role) {
                                     "PARENT" -> navController.navigate("parent_dashboard") { popUpTo("splash") { inclusive = true } }
                                     "CHILD" -> {
-                                        // Ensure this device's FID is current in Firestore.
-                                        // If the app was restored from backup onto a new device, the
-                                        // family doc may still point to the old device's FID.
                                         DeviceRepository.getFid { currentFid ->
                                             if (currentFid != null) {
                                                 FirebaseUserManager.fetchDeviceFidPointers(uid) { _, storedChildFid, _ ->
@@ -117,8 +129,12 @@ fun AppRouter() {
                 }
             }
 
-            Box(modifier = Modifier.fillMaxSize().background(AppTheme.PrimaryGradient), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
+            if (splashError != null) {
+                SplashErrorScreen(error = splashError!!, onRetry = { retryKey++ })
+            } else {
+                Box(modifier = Modifier.fillMaxSize().background(AppTheme.PrimaryGradient), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Color.White)
+                }
             }
         }
 
@@ -150,9 +166,16 @@ fun AppRouter() {
                 onSignIn = { email, pass ->
                     if (email.isBlank() || pass.isBlank()) {
                         Toast.makeText(context, "Please enter email and password", Toast.LENGTH_SHORT).show()
+                    } else if (!NetworkUtils.isAvailable(context)) {
+                        Toast.makeText(context, "No internet connection", Toast.LENGTH_SHORT).show()
                     } else {
                         isAuthLoading = true
+                        val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
+                            isAuthLoading = false
+                            Toast.makeText(context, "Sign in timed out. Please try again.", Toast.LENGTH_SHORT).show()
+                        }
                         AuthRepository.signIn(context, email, pass) { success, error ->
+                            cancelTimeout()
                             isAuthLoading = false
                             if (success) {
                                 userName = UserRepository.getLocalName(context)
@@ -168,9 +191,16 @@ fun AppRouter() {
                         Toast.makeText(context, "Please fill all fields", Toast.LENGTH_SHORT).show()
                     } else if (pass != confirmPass) {
                         Toast.makeText(context, "Passwords do not match", Toast.LENGTH_SHORT).show()
+                    } else if (!NetworkUtils.isAvailable(context)) {
+                        Toast.makeText(context, "No internet connection", Toast.LENGTH_SHORT).show()
                     } else {
                         isAuthLoading = true
+                        val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
+                            isAuthLoading = false
+                            Toast.makeText(context, "Registration timed out. Please try again.", Toast.LENGTH_SHORT).show()
+                        }
                         AuthRepository.register(context, name, email, pass) { success, error ->
+                            cancelTimeout()
                             isAuthLoading = false
                             if (success) {
                                 userName = UserRepository.getLocalName(context)
@@ -212,17 +242,22 @@ fun AppRouter() {
                 user = userName,
                 onSelectChild = {
                     val uid = AuthRepository.getUserId() ?: return@RoleSelectionScreen
+                    if (!NetworkUtils.isAvailable(context)) {
+                        Toast.makeText(context, "No internet connection", Toast.LENGTH_SHORT).show()
+                        return@RoleSelectionScreen
+                    }
                     DeviceRepository.getFid { newFid ->
                         if (newFid != null) {
-                            // 1. Check if the parent already has a child linked
+                            val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
+                                Toast.makeText(context, "Request timed out. Please try again.", Toast.LENGTH_SHORT).show()
+                            }
                             FirebaseUserManager.fetchDeviceFidPointers(uid) { _, existingChildFid, _ ->
+                                cancelTimeout()
                                 if (existingChildFid != null && existingChildFid != newFid) {
-                                    // 2. An old device exists! Trigger the pop-up.
                                     existingOldFid = existingChildFid
                                     pendingNewFid = newFid
                                     showTransferDialog = true
                                 } else {
-                                    // 3. No old device exists. Just link it normally.
                                     DeviceRepository.setRoleForThisDevice(context, uid, newFid, "CHILD") { success ->
                                         if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
                                     }
@@ -233,9 +268,17 @@ fun AppRouter() {
                 },
                 onSelectParent = {
                     val uid = AuthRepository.getUserId() ?: return@RoleSelectionScreen
+                    if (!NetworkUtils.isAvailable(context)) {
+                        Toast.makeText(context, "No internet connection", Toast.LENGTH_SHORT).show()
+                        return@RoleSelectionScreen
+                    }
                     DeviceRepository.getFid { fid ->
                         if (fid != null) {
+                            val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
+                                Toast.makeText(context, "Request timed out. Please try again.", Toast.LENGTH_SHORT).show()
+                            }
                             DeviceRepository.setRoleForThisDevice(context, uid, fid, "PARENT") { success ->
+                                cancelTimeout()
                                 if (success) navController.navigate("parent_dashboard") { popUpTo("role_selection") { inclusive = true } }
                             }
                         }
@@ -290,24 +333,35 @@ fun AppRouter() {
             ) { }
 
             val loadData = {
-                isRefreshing = true
-                val uid = AuthRepository.getUserId()
-                if (uid != null) {
-                    FirebaseUserManager.fetchDeviceFidPointers(uid) { _, cFid, cDisplayUid ->
-                        childFid = cFid
-                        childDisplayUid = cDisplayUid
-                        if (cFid != null) {
-                            FirebaseSyncManager.requestChildSync(cFid)
-                            IncidentRepository.fetchRecentIncidents(context, cFid, onSuccess = { logs ->
-                                incidents.clear()
-                                incidents.addAll(logs)
-                                isRefreshing = false
-                            }, onError = { error ->
-                                isRefreshing = false
-                                Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
-                            })
-                        } else {
+                if (!NetworkUtils.isAvailable(context)) {
+                    Toast.makeText(context, "No internet connection", Toast.LENGTH_SHORT).show()
+                } else {
+                    isRefreshing = true
+                    val uid = AuthRepository.getUserId()
+                    if (uid != null) {
+                        val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
                             isRefreshing = false
+                            Toast.makeText(context, "Request timed out. Please try again.", Toast.LENGTH_SHORT).show()
+                        }
+                        FirebaseUserManager.fetchDeviceFidPointers(uid) { _, cFid, cDisplayUid ->
+                            childFid = cFid
+                            childDisplayUid = cDisplayUid
+                            if (cFid != null) {
+                                FirebaseSyncManager.requestChildSync(cFid)
+                                IncidentRepository.fetchRecentIncidents(context, cFid, onSuccess = { logs ->
+                                    cancelTimeout()
+                                    incidents.clear()
+                                    incidents.addAll(logs)
+                                    isRefreshing = false
+                                }, onError = { error ->
+                                    cancelTimeout()
+                                    isRefreshing = false
+                                    Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                                })
+                            } else {
+                                cancelTimeout()
+                                isRefreshing = false
+                            }
                         }
                     }
                 }
@@ -419,6 +473,41 @@ fun AppRouter() {
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun SplashErrorScreen(error: String, onRetry: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize().background(AppTheme.PrimaryGradient),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(horizontal = 40.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.WifiOff,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(64.dp)
+            )
+            Text(
+                text = error,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                fontSize = 16.sp
+            )
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Retry", color = AppTheme.Primary, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
