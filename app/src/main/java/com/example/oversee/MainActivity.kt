@@ -90,7 +90,21 @@ fun AppRouter() {
                                 userName = UserRepository.getLocalName(context)
                                 when (role) {
                                     "PARENT" -> navController.navigate("parent_dashboard") { popUpTo("splash") { inclusive = true } }
-                                    "CHILD" -> navController.navigate("child_dashboard") { popUpTo("splash") { inclusive = true } }
+                                    "CHILD" -> {
+                                        // Ensure this device's FID is current in Firestore.
+                                        // If the app was restored from backup onto a new device, the
+                                        // family doc may still point to the old device's FID.
+                                        DeviceRepository.getFid { currentFid ->
+                                            if (currentFid != null) {
+                                                FirebaseUserManager.fetchDeviceFidPointers(uid) { _, storedChildFid, _ ->
+                                                    if (storedChildFid != currentFid) {
+                                                        DeviceRepository.setRoleForThisDevice(context, uid, currentFid, "CHILD") {}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        navController.navigate("child_dashboard") { popUpTo("splash") { inclusive = true } }
+                                    }
                                     else -> navController.navigate("role_selection") { popUpTo("splash") { inclusive = true } }
                                 }
                             }
