@@ -327,13 +327,30 @@ fun AppRouter() {
                 onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
             }
 
+            // --- NEW FIX 3: Live listener — re-fetch whenever the child's logs collection changes ---
+            // requestChildSync fires and the child responds asynchronously. This listener catches
+            // the child's upload regardless of timing — the initial snapshot handles "already
+            // uploaded", and subsequent snapshots handle "uploaded after open".
+            DisposableEffect(childFid) {
+                val fid = childFid ?: return@DisposableEffect onDispose {}
+                val listener = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                    .collection("monitor_sessions").document(fid).collection("logs")
+                    .addSnapshotListener { _, error ->
+                        if (error != null) return@addSnapshotListener
+                        IncidentRepository.fetchRecentIncidents(context, fid, onSuccess = { logs ->
+                            incidents.clear()
+                            incidents.addAll(logs)
+                        }, onError = {})
+                    }
+                onDispose { listener.remove() }
+            }
+
             LaunchedEffect(Unit) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                         launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
-                loadData()
             }
 
             if (childFid == null) {

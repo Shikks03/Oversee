@@ -169,6 +169,7 @@ class ScreenCaptureService : Service() {
         val startTime = System.currentTimeMillis()
 
         // Fetch preferences dynamically inside the scope
+        val timeoutEnabled = try { AppPreferenceManager.getBoolean(applicationContext, "timeout_enabled", true) } catch (e: Exception) { true }
         val blockMins = try { AppPreferenceManager.getLong(applicationContext, "block_duration_mins", 5L) } catch (e: Exception) { 5L }
         val burstThreshold = try { AppPreferenceManager.getLong(applicationContext, "burst_threshold", 50L) } catch (e: Exception) { 50L }
 
@@ -231,7 +232,7 @@ class ScreenCaptureService : Service() {
                                 )
 
                                 // --- PENALTY OVERLAY LOGIC ---
-                                if (severity == "HIGH") {
+                                if (severity == "HIGH" && timeoutEnabled) {
                                     val unlockTime = System.currentTimeMillis() + (blockMins * 60 * 1000L)
                                     try { AppPreferenceManager.saveLong(applicationContext, "app_unlock_time", unlockTime) } catch (e: Exception) {}
 
