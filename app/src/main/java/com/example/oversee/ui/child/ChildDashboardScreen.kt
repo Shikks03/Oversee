@@ -32,6 +32,8 @@ import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.remote.FirebaseSyncManager
+import com.example.oversee.domain.WordFilterLists
+import com.example.oversee.domain.WordListRepository
 import com.example.oversee.service.OverlayService
 import com.example.oversee.service.ScreenCaptureService
 import com.example.oversee.ui.components.inputs.OverSeePinPad
@@ -126,6 +128,14 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                 if (uid6.isNotBlank()) displayUid = uid6
             }
         }
+
+        val wordListRepo = WordListRepository(context)
+        if (wordListRepo.isDueSynced() || wordListRepo.isMissingFilterCache()) {
+            wordListRepo.syncFromFirestore()
+            val (cf, pp) = wordListRepo.getCachedFilterLists()
+            WordFilterLists.update(cf, pp)
+        }
+
         performHealthCheck()
         addToConsole("System Initialized.")
     }

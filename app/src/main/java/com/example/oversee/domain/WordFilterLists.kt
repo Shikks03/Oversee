@@ -21,7 +21,7 @@ package com.example.oversee.domain
  */
 object WordFilterLists {
 
-    val COLLISION_FILTER_WORDS: Set<String> = setOf(
+    val DEFAULT_COLLISION_FILTER_WORDS: Set<String> = setOf(
         // === TAGALOG FUNCTION WORDS ===
 
         // Articles / Markers (linkers, case markers)
@@ -187,7 +187,7 @@ object WordFilterLists {
         "thanks", "thank", "please", "sorry", "welcome"
     )
 
-    val PERSON_TARGETING_PRONOUNS: Set<String> = setOf(
+    val DEFAULT_PERSON_TARGETING_PRONOUNS: Set<String> = setOf(
         // === TAGALOG — Second person (direct targeting) ===
         "ikaw", "ka", "mo", "iyo", "sayo", "kayo", "inyo",
 
@@ -204,12 +204,29 @@ object WordFilterLists {
         "they", "them", "their"
     )
 
+    @Volatile var COLLISION_FILTER_WORDS: Set<String> = DEFAULT_COLLISION_FILTER_WORDS
+        private set
+
+    @Volatile var PERSON_TARGETING_PRONOUNS: Set<String> = DEFAULT_PERSON_TARGETING_PRONOUNS
+        private set
+
     init {
-        val overlap = COLLISION_FILTER_WORDS.intersect(PERSON_TARGETING_PRONOUNS)
+        val overlap = DEFAULT_COLLISION_FILTER_WORDS.intersect(DEFAULT_PERSON_TARGETING_PRONOUNS)
         check(overlap.isEmpty()) {
             "DESIGN ERROR: the following words appear in both COLLISION_FILTER_WORDS " +
                 "and PERSON_TARGETING_PRONOUNS: $overlap"
         }
+    }
+
+    /** Replaces the active filter sets with cloud-sourced data. Falls back to defaults if overlap detected. */
+    fun update(collisionFilter: Set<String>, pronouns: Set<String>) {
+        val overlap = collisionFilter.intersect(pronouns)
+        if (overlap.isNotEmpty()) {
+            android.util.Log.w("WordFilterLists", "Ignoring cloud update — overlap detected: $overlap")
+            return
+        }
+        COLLISION_FILTER_WORDS = collisionFilter
+        PERSON_TARGETING_PRONOUNS = pronouns
     }
 
     fun isCollisionFilterWord(normalizedToken: String): Boolean =

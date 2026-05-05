@@ -44,6 +44,7 @@ import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.model.Incident
 import com.example.oversee.domain.TextAnalysisEngine
 import com.example.oversee.domain.ToxicityScorer
+import com.example.oversee.domain.WordFilterLists
 import com.example.oversee.domain.WordListRepository
 import com.example.oversee.utils.sendConsoleUpdate
 import com.google.firebase.firestore.FirebaseFirestore
@@ -104,13 +105,17 @@ class ScreenCaptureService : Service() {
         wordListRepository = WordListRepository(this)
         val (english, tagalog) = wordListRepository.getCachedWords()
         textAnalysisEngine = TextAnalysisEngine.fromWordLists(english, tagalog)
+        val (cf, pp) = wordListRepository.getCachedFilterLists()
+        WordFilterLists.update(cf, pp)
 
         serviceScope.launch {
-            if (wordListRepository.isDueSynced()) {
+            if (wordListRepository.isDueSynced() || wordListRepository.isMissingFilterCache()) {
                 val changed = wordListRepository.syncFromFirestore()
                 if (changed) {
                     val (eng, tag) = wordListRepository.getCachedWords()
                     textAnalysisEngine = TextAnalysisEngine.fromWordLists(eng, tag)
+                    val (newCf, newPp) = wordListRepository.getCachedFilterLists()
+                    WordFilterLists.update(newCf, newPp)
                 }
             }
         }
