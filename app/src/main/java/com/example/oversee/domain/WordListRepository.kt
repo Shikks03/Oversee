@@ -50,15 +50,15 @@ class WordListRepository(private val context: Context) {
 
     /**
      * Returns cached whitelist sets synchronously.
-     * Falls back to the hardcoded defaults in WordFilterLists if no Firestore cache exists yet.
+     * Falls back to bundled assets if no Firestore cache exists yet.
      */
     fun getCachedFilterLists(): Pair<Set<String>, Set<String>> {
         val collisionFilter = prefs.getString(PREF_COLLISION_FILTER, null)
             ?.lines()?.filter { it.isNotBlank() }?.toSet()
-            ?: WordFilterLists.DEFAULT_COLLISION_FILTER_WORDS
+            ?: loadFromAssets("collision_filter_words.txt").toSet()
         val pronouns = prefs.getString(PREF_PERSON_PRONOUNS, null)
             ?.lines()?.filter { it.isNotBlank() }?.toSet()
-            ?: WordFilterLists.DEFAULT_PERSON_TARGETING_PRONOUNS
+            ?: loadFromAssets("person_targeting_pronouns.txt").toSet()
         return collisionFilter to pronouns
     }
 
@@ -113,8 +113,8 @@ class WordListRepository(private val context: Context) {
                     changed = true
                 }
             } else {
-                Log.i(TAG, "collision_filter not in Firestore — seeding from defaults")
-                seedToFirestore("collision_filter", WordFilterLists.DEFAULT_COLLISION_FILTER_WORDS.toList())
+                Log.i(TAG, "collision_filter not in Firestore — seeding from assets")
+                seedToFirestore("collision_filter", loadFromAssets("collision_filter_words.txt"))
             }
 
             if (!ppWords.isNullOrEmpty()) {
@@ -124,8 +124,8 @@ class WordListRepository(private val context: Context) {
                     changed = true
                 }
             } else {
-                Log.i(TAG, "person_pronouns not in Firestore — seeding from defaults")
-                seedToFirestore("person_pronouns", WordFilterLists.DEFAULT_PERSON_TARGETING_PRONOUNS.toList())
+                Log.i(TAG, "person_pronouns not in Firestore — seeding from assets")
+                seedToFirestore("person_pronouns", loadFromAssets("person_targeting_pronouns.txt"))
             }
 
             prefs.edit().putLong(PREF_LAST_SYNC, System.currentTimeMillis()).apply()
