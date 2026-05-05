@@ -9,8 +9,9 @@ import kotlin.math.max
  * Combined text preprocessing and Levenshtein fuzzy-matching pipeline.
  *
  * Usage:
- *   val engine = TextAnalysisEngine.fromAssets(context)  // production
- *   val engine = TextAnalysisEngine.withWords(setOf(...)) // tests
+ *   val engine = TextAnalysisEngine.fromAssets(context)           // assets fallback
+ *   val engine = TextAnalysisEngine.fromWordLists(english, tagalog) // Firestore-sourced
+ *   val engine = TextAnalysisEngine.withWords(setOf(...))          // tests
  *   val result: AnalysisResult = engine.analyze(ocrText)
  */
 class TextAnalysisEngine private constructor(
@@ -25,25 +26,33 @@ class TextAnalysisEngine private constructor(
             "inappropriate_words_tagalog.txt"
         )
 
-        /** Production entry point — loads both word lists from assets. */
-        fun fromAssets(context: Context): TextAnalysisEngine {
+        private fun buildFromLines(lines: Iterable<String>): TextAnalysisEngine {
             val singles = mutableSetOf<String>()
             val multis = mutableSetOf<List<String>>()
-            ASSET_FILES.forEach { filename ->
-                context.assets.open(filename).bufferedReader().useLines { lines ->
-                    lines.forEach { raw ->
-                        val line = raw.trim().lowercase(Locale.getDefault())
-                        if (line.isEmpty()) return@forEach
-                        val parts = line.split(Regex("\\s+")).filter { it.isNotEmpty() }
-                        when {
-                            parts.size == 1 -> singles.add(parts[0])
-                            parts.size >= 2 -> multis.add(parts)
-                        }
-                    }
+            lines.forEach { raw ->
+                val line = raw.trim().lowercase(Locale.getDefault())
+                if (line.isEmpty()) return@forEach
+                val parts = line.split(Regex("\\s+")).filter { it.isNotEmpty() }
+                when {
+                    parts.size == 1 -> singles.add(parts[0])
+                    parts.size >= 2 -> multis.add(parts)
                 }
             }
             return TextAnalysisEngine(singles, multis)
         }
+
+        /** Loads both word lists from bundled assets. Used as fallback when offline. */
+        fun fromAssets(context: Context): TextAnalysisEngine {
+            val lines = mutableListOf<String>()
+            ASSET_FILES.forEach { filename ->
+                context.assets.open(filename).bufferedReader().useLines { lines.addAll(it) }
+            }
+            return buildFromLines(lines)
+        }
+
+        /** Builds engine from Firestore-sourced word lists (english + tagalog lines). */
+        fun fromWordLists(english: List<String>, tagalog: List<String>): TextAnalysisEngine =
+            buildFromLines(english + tagalog)
 
         /** Test entry point — inject a pre-built single-word set directly. */
         fun withWords(words: Set<String>): TextAnalysisEngine = TextAnalysisEngine(words, emptySet())

@@ -44,9 +44,15 @@ import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.model.Incident
 import com.example.oversee.domain.TextAnalysisEngine
 import com.example.oversee.domain.ToxicityScorer
+import com.example.oversee.domain.WordListRepository
 import com.example.oversee.utils.sendConsoleUpdate
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -71,7 +77,9 @@ class ScreenCaptureService : Service() {
 
     // --- ML KIT & ANALYSIS ---
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-    private lateinit var textAnalysisEngine: TextAnalysisEngine
+    @Volatile private lateinit var textAnalysisEngine: TextAnalysisEngine
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private lateinit var wordListRepository: WordListRepository
 
     private val debounceMap = ConcurrentHashMap<String, Long>()
     private val ocrExecutor = Executors.newSingleThreadExecutor()
@@ -93,7 +101,19 @@ class ScreenCaptureService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        textAnalysisEngine = TextAnalysisEngine.fromAssets(this)
+        wordListRepository = WordListRepository(this)
+        val (english, tagalog) = wordListRepository.getCachedWords()
+        textAnalysisEngine = TextAnalysisEngine.fromWordLists(english, tagalog)
+
+        serviceScope.launch {
+            if (wordListRepository.isDueSynced()) {
+                val changed = wordListRepository.syncFromFirestore()
+                if (changed) {
+                    val (eng, tag) = wordListRepository.getCachedWords()
+                    textAnalysisEngine = TextAnalysisEngine.fromWordLists(eng, tag)
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
@@ -397,6 +417,7 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         Thread { IncidentRepository.syncData(applicationContext) }.start()
         syncRequestListener?.remove()
         handler.removeCallbacksAndMessages(null)

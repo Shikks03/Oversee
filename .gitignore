@@ -34,6 +34,10 @@ copilot-instructions.md
 # Planning/AI docs
 docs/superpowers/
 
+# Node (manual generator)
+node_modules/
+package-lock.json
+
 # JVM crash dumps
 hs_err_pid*.log
 replay_pid*.log

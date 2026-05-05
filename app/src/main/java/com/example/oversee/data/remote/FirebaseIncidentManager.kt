@@ -47,7 +47,7 @@ object FirebaseIncidentManager {
                                             matchedWord = CryptoManager.decryptString(item["matchedWord"] as String? ?: "", key),
                                             severity = CryptoManager.decryptString(item["severity"] as String? ?: "", key),
                                             app = CryptoManager.decryptString(item["app"] as String? ?: "", key),
-                                            timestamp = item["timestamp"] as? Long ?: 0L
+                                            timestamp = (item["timestamp"] as? Number)?.toLong() ?: 0L
                                         )
                                     )
                                 }
