@@ -88,7 +88,8 @@ class OverseeMessagingService : FirebaseMessagingService() {
         )
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            // Used the built-in Android warning icon (an exclamation mark in a triangle)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
             .setContentTitle("High Severity Alert")
             .setContentText("A high severity word has been detected on the child's device.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

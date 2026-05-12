@@ -231,10 +231,11 @@ class ScreenCaptureService : Service() {
                         scoredWords.forEach { scored ->
                             val lastSeen = debounceMap[scored.matchedWord] ?: 0L
                             val now = System.currentTimeMillis()
+                            var severity = mapSeverity(scored.severity)
+                            val isDebounced = (now - lastSeen <= DEBOUNCE_TIME_MS)
 
-                            if (now - lastSeen > DEBOUNCE_TIME_MS) {
+                            if (!isDebounced) {
                                 debounceMap[scored.matchedWord] = now
-                                var severity = mapSeverity(scored.severity)
 
                                 // --- BURST DETECTION LOGIC ---
                                 recentIncidents.removeAll { now - it > BURST_TIME_WINDOW_MS }
@@ -266,12 +267,12 @@ class ScreenCaptureService : Service() {
                                     }
                                     startService(overlayIntent)
                                 }
-
-                                Log.d("OCR_TRACE", "[$id] 🚨 FLAG CAUGHT: Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
-                                sendConsoleUpdate("🚨 FLAG CAUGHT: OCR Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨")
-                            } else {
-                                Log.d("OCR_TRACE", "[$id] Debounced matched word: ${scored.matchedWord}")
                             }
+
+                            val statusTag = if (isDebounced) "[DEBOUNCED]" else "[NEW]"
+                            val logMsg = "🚨 FLAG CAUGHT $statusTag: Saw='${scored.originalText}' -> Cleaned='${scored.rawToken}' -> Matched='${scored.matchedWord}' (Severity: $severity) in ${duration}ms 🚨"
+                            Log.d("OCR_TRACE", "[$id] $logMsg")
+                            sendConsoleUpdate(logMsg)
                         }
                     }
                 }
@@ -368,7 +369,7 @@ class ScreenCaptureService : Service() {
                     val requestedAt = snapshot.getLong("sync_requested_at") ?: return@addSnapshotListener
                     if (requestedAt > lastHandledSyncRequest) {
                         lastHandledSyncRequest = requestedAt
-                        Log.d(TAG, "📲 Parent requested sync")
+                        Log.d(TAG, "憧 Parent requested sync")
                         sendConsoleUpdate("System: Parent requested sync")
                         IncidentRepository.syncData(applicationContext)
                     }
@@ -417,7 +418,7 @@ class ScreenCaptureService : Service() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         return Notification.Builder(this, channelId)
             .setContentTitle("SafeMonitor Running")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
             .build()
     }
 

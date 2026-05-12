@@ -81,26 +81,12 @@ fun ChildLinkSetupScreen(deviceId: String, onLinkConfirmed: () -> Unit, onLogout
 // 2. SMART PIN SETUP FLOW
 // =========================================================================
 @Composable
-fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) {
-    var stage by remember { mutableStateOf(if (parentPin.isNotBlank()) "ASK_PARENT" else "CREATE_NEW") }
+fun SmartPinSetupFlow(onPinSaved: (String) -> Unit) {
+    var stage by remember { mutableStateOf("CREATE_NEW") }
     var tempPin by remember { mutableStateOf("") }
     var errorTxt by remember { mutableStateOf<String?>(null) }
-    var syncParentPin by remember { mutableStateOf(false) }
 
     when (stage) {
-        "ASK_PARENT" -> {
-            OverSeePinPad(
-                title = "Use Parent PIN?",
-                subtitle = "An existing Parent Dashboard PIN was found. Enter it to secure this device as well.",
-                errorText = errorTxt,
-                onPinComplete = { entered ->
-                    if (entered == parentPin) onPinSaved(entered, false) else errorTxt = "Incorrect Parent PIN."
-                },
-                bottomContent = {
-                    TextButton(onClick = { stage = "CREATE_NEW" }) { Text("Create a Different PIN Instead", color = AppTheme.ChildAccent, fontWeight = FontWeight.Bold) }
-                }
-            )
-        }
         "CREATE_NEW" -> {
             OverSeePinPad(
                 title = "Create PIN",
@@ -108,14 +94,6 @@ fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) 
                 onPinComplete = { entered ->
                     tempPin = entered
                     stage = "CONFIRM_NEW"
-                },
-                bottomContent = {
-                    if (parentPin.isBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { syncParentPin = !syncParentPin }) {
-                            Checkbox(checked = syncParentPin, onCheckedChange = { syncParentPin = it }, colors = CheckboxDefaults.colors(checkedColor = AppTheme.ChildAccent))
-                            Text("Use this PIN for Parent Dashboard too", fontSize = 14.sp, color = Color.DarkGray)
-                        }
-                    }
                 }
             )
         }
@@ -125,14 +103,16 @@ fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) 
                 subtitle = "Re-enter your 4-digit PIN to confirm.",
                 errorText = errorTxt,
                 onPinComplete = { entered ->
-                    if (entered == tempPin) onPinSaved(entered, syncParentPin)
+                    if (entered == tempPin) onPinSaved(entered)
                     else {
                         errorTxt = "PINs do not match. Try again."
                         stage = "CREATE_NEW"
                     }
                 },
                 bottomContent = {
-                    TextButton(onClick = { stage = "CREATE_NEW"; errorTxt = null }) { Text("Start Over", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold) }
+                    TextButton(onClick = { stage = "CREATE_NEW"; errorTxt = null }) {
+                        Text("Start Over", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold)
+                    }
                 }
             )
         }

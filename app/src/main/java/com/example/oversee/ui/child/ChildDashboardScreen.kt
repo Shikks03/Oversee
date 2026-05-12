@@ -177,11 +177,9 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         )
     } else if (savedChildPin.isBlank()) {
         SmartPinSetupFlow(
-            parentPin = parentPin,
-            onPinSaved = { newPin, saveForParentToo ->
+            onPinSaved = { newPin ->
                 AppPreferenceManager.saveString(context, "child_pin", newPin)
                 savedChildPin = newPin
-                if (saveForParentToo) AppPreferenceManager.saveString(context, "parent_pin", newPin)
                 isUnlocked = true
             }
         )
