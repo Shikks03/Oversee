@@ -14,6 +14,15 @@
 .cxx
 local.properties
 
+# IDE runtime state
+/.idea/deploymentTargetSelector.xml
+
+# Kotlin incremental build cache
+.kotlin/
+
+# Release APKs
+app/release/
+
 # AI
 .claude/
 .ai/
