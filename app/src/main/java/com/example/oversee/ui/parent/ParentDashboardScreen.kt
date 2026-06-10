@@ -1,6 +1,5 @@
 package com.example.oversee.ui.parent
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -16,9 +15,7 @@ import androidx.compose.ui.window.DialogProperties
 import java.util.Calendar
 
 // --- PROJECT DATA & SERVICES ---
-import com.example.oversee.data.AuthRepository
-import com.example.oversee.data.UserRepository
-import com.example.oversee.data.local.AppPreferenceManager
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.remote.FirebaseSyncManager
 import com.example.oversee.ui.theme.AppTheme
 
@@ -33,25 +30,26 @@ import com.example.oversee.ui.parent.settings.*
 
 @Composable
 fun ParentDashboardScreen(
-    targetId: String,
-    targetNickname: String,
+    children: List<DeviceRepository.ChildDevice>,
+    selectedChildFid: String?,
     incidents: List<FirebaseSyncManager.LogEntry>,
     refreshing: Boolean,
     onRefresh: () -> Unit,
+    onChildSelected: (String) -> Unit,
+    onRenameChild: (String) -> Unit,
+    onRemoveChild: (DeviceRepository.ChildDevice) -> Unit,
     onLogoutClick: () -> Unit,
     onDebugResetRole: () -> Unit,
     initialTab: Int = 0
 ) {
     val context = LocalContext.current
     var currentTab by remember { mutableIntStateOf(initialTab) }
-
-    // Dialog States
     var showEditDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // Live State for Target Nickname/ID so it updates immediately when edited
-    var liveTargetId by remember { mutableStateOf(targetId) }
-    var liveTargetNickname by remember { mutableStateOf(targetNickname) }
+    val selectedChild = children.firstOrNull { it.fid == selectedChildFid }
+    val targetNickname = selectedChild?.name ?: "Child Device"
+    val targetId = selectedChild?.displayUid ?: DeviceRepository.toDisplayCode(selectedChildFid)
 
     val defaultEnd = remember { System.currentTimeMillis() }
     val defaultStart = remember { defaultEnd - (7 * 24 * 60 * 60 * 1000L) }
@@ -89,7 +87,9 @@ fun ParentDashboardScreen(
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (currentTab) {
                 0 -> DashboardOverviewScreen(
-                    targetId = liveTargetId, targetNickname = liveTargetNickname, incidents = incidents,
+                    targetId = targetId, targetNickname = targetNickname,
+                    children = children, selectedChildFid = selectedChildFid, onChildSelected = onChildSelected,
+                    incidents = incidents,
                     startDate = sharedStartDate, endDate = sharedEndDate, refreshing = refreshing,
                     onRefresh = onRefreshAndExtendRange, onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
                     onEditClick = { showEditDialog = true },
@@ -102,6 +102,8 @@ fun ParentDashboardScreen(
                     refreshing = refreshing, onRefresh = onRefreshAndExtendRange, onDebugResetRole = onDebugResetRole
                 )
                 3 -> SettingsScreen(
+                    children = children,
+                    onRemoveChild = onRemoveChild,
                     onLogoutClick = { showLogoutDialog = true },
                     onDebugResetRole = onDebugResetRole,
                     onSyncHistoryClick = { currentTab = 6 },
@@ -128,29 +130,11 @@ fun ParentDashboardScreen(
         // --- CUSTOM DIALOGS USING THE REUSABLE COMPONENT ---
 
         if (showEditDialog) {
-            EditChildDeviceDialog(
-                currentId = if (liveTargetId == "NOT_LINKED") "" else liveTargetId,
-                currentNickname = if (liveTargetId == "NOT_LINKED") "" else liveTargetNickname,
+            EditChildNameDialog(
+                currentName = targetNickname,
                 onDismiss = { showEditDialog = false },
-                onConfirm = { newNickname: String, newId: String ->
-                    val finalNick = newNickname.ifBlank { "Child Device" }
-                    AppPreferenceManager.saveString(context, "target_nickname", finalNick)
-                    liveTargetNickname = finalNick
-
-                    if (newId != liveTargetId && newId.isNotBlank()) {
-                        val uid = AuthRepository.getUserId()
-                        if (uid != null) {
-                            UserRepository.linkChildDevice(context, uid, newId) { success ->
-                                if (success) {
-                                    liveTargetId = newId
-                                    onRefresh()
-                                    Toast.makeText(context, "Device Linked Successfully", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Toast.makeText(context, "Failed to link device", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    }
+                onConfirm = { newName ->
+                    onRenameChild(newName.ifBlank { "Child Device" })
                     showEditDialog = false
                 }
             )
@@ -199,39 +183,26 @@ private fun SyncLoadingDialog() {
     }
 }
 
-// --- CLEANED UP EDIT DEVICE DIALOG ---
 @Composable
-private fun EditChildDeviceDialog(
-    currentId: String,
-    currentNickname: String,
+private fun EditChildNameDialog(
+    currentName: String,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit
+    onConfirm: (String) -> Unit
 ) {
-    var nickname by remember { mutableStateOf(currentNickname) }
-    var deviceId by remember { mutableStateOf(currentId) }
-    val isNewLink = currentId.isBlank()
+    var name by remember { mutableStateOf(currentName) }
 
-    // Pass the TextFields directly into our new reusable OverSeeDialog!
     OverSeeDialog(
-        title = if (isNewLink) "Link Child Device" else "Edit Child Device",
-        description = "Enter your child's 6-digit ID to connect their device to your dashboard.",
-        confirmText = if (isNewLink) "Link Device" else "Save Changes",
-        onConfirm = { onConfirm(nickname, deviceId) },
+        title = "Edit Child Name",
+        description = "This name is shown on your dashboard and in alerts.",
+        confirmText = "Save",
+        onConfirm = { onConfirm(name) },
         onDismiss = onDismiss
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            OverSeeTextField(
-                value = nickname,
-                onValueChange = { nickname = it },
-                label = "Child's Name / Nickname",
-                modifier = Modifier.fillMaxWidth()
-            )
-            OverSeeTextField(
-                value = deviceId,
-                onValueChange = { deviceId = it },
-                label = "Child's 6-Digit ID",
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+        OverSeeTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = "Child's Name / Nickname",
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

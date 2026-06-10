@@ -19,17 +19,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.oversee.data.DeviceRepository
+import com.example.oversee.ui.components.dialogs.OverSeeDialog
 import com.example.oversee.ui.theme.AppTheme
 
 @Composable
 fun SettingsScreen(
+    children: List<DeviceRepository.ChildDevice>,
+    onRemoveChild: (DeviceRepository.ChildDevice) -> Unit,
     onLogoutClick: () -> Unit,
     onDebugResetRole: () -> Unit,
     onSyncHistoryClick: () -> Unit,
     onHelpSupportClick: () -> Unit,
     onPrivacyPolicyClick: () -> Unit = {}
 ) {
-    var showUnlinkDialog by remember { mutableStateOf(false) }
+    var showRemovePicker by remember { mutableStateOf(false) }
+    var removeCandidate by remember { mutableStateOf<DeviceRepository.ChildDevice?>(null) }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppTheme.PaddingDefault),
@@ -45,7 +50,7 @@ fun SettingsScreen(
         // 2. Device Management
         SettingsGroup("Device Management") {
             SettingsItem(Icons.Default.History, "Syncing History", "View past data synchronizations", onClick = onSyncHistoryClick)
-            SettingsItem(Icons.Default.LinkOff, "Unlink Device", "Stop monitoring the current child device", isDestructive = true, onClick = { showUnlinkDialog = true })
+            SettingsItem(Icons.Default.LinkOff, "Remove Child Device", "Stop monitoring and delete a child's data", isDestructive = true, onClick = { showRemovePicker = true })
         }
 
         // 3. Security & Control
@@ -68,20 +73,45 @@ fun SettingsScreen(
         Spacer(Modifier.height(40.dp))
     }
 
-    if (showUnlinkDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnlinkDialog = false },
-            title = { Text("Unlink Device?", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to stop monitoring this child device? This will stop all incoming data.") },
-            confirmButton = {
-                Button(
-                    onClick = { showUnlinkDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Error)
-                ) { Text("Unlink") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnlinkDialog = false }) { Text("Cancel") }
+    if (showRemovePicker) {
+        OverSeeDialog(
+            title = "Remove Child Device",
+            description = if (children.isEmpty()) "No child devices linked." else "Select the child to remove:",
+            confirmText = "Close",
+            onConfirm = { showRemovePicker = false },
+            onDismiss = { showRemovePicker = false }
+        ) {
+            Column {
+                children.forEach { child ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                removeCandidate = child
+                                showRemovePicker = false
+                            }
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Person, contentDescription = null, tint = AppTheme.Primary)
+                        Text(child.name, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp))
+                    }
+                }
             }
+        }
+    }
+
+    removeCandidate?.let { candidate ->
+        OverSeeDialog(
+            title = "Remove ${candidate.name}?",
+            description = "This permanently deletes all monitored data for this child. The child's phone will stop syncing.",
+            confirmText = "Remove",
+            isDestructive = true,
+            onConfirm = {
+                onRemoveChild(candidate)
+                removeCandidate = null
+            },
+            onDismiss = { removeCandidate = null }
         )
     }
 }

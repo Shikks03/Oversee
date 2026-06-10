@@ -120,12 +120,12 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
             UserRepository.initializeDeviceId(context, uid) { id ->
                 deviceId = id
                 if (displayUid == "------") displayUid = DeviceRepository.toDisplayCode(id)
+                DeviceRepository.getDisplayUidForChild(uid, id) { uid6 ->
+                    if (uid6.isNotBlank()) displayUid = uid6
+                }
                 com.example.oversee.data.local.KeyManager.getOrCreateKey(context, id) {
                     addToConsole("Encryption Key Ready.")
                 }
-            }
-            DeviceRepository.getOrCreateDisplayUid(uid) { uid6 ->
-                if (uid6.isNotBlank()) displayUid = uid6
             }
         }
 

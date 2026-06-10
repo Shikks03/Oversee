@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.remote.FirebaseSyncManager
 import com.example.oversee.ui.theme.AppTheme
 import java.text.SimpleDateFormat
@@ -40,6 +41,9 @@ import com.example.oversee.ui.components.lists.WordItem
 fun DashboardOverviewScreen(
     targetId: String,
     targetNickname: String,
+    children: List<DeviceRepository.ChildDevice>,
+    selectedChildFid: String?,
+    onChildSelected: (String) -> Unit,
     incidents: List<FirebaseSyncManager.LogEntry>,
     startDate: Long,
     endDate: Long,
@@ -82,6 +86,9 @@ fun DashboardOverviewScreen(
             CompactHeaderRow(
                 targetNickname = targetNickname,
                 targetId = targetId,
+                children = children,
+                selectedChildFid = selectedChildFid,
+                onChildSelected = onChildSelected,
                 lastSyncTime = lastSyncTime,
                 refreshing = refreshing,
                 onEditClick = onEditClick,
@@ -202,11 +209,15 @@ fun UnlinkedDashboardState(onLinkDeviceClick: () -> Unit) {
 private fun CompactHeaderRow(
     targetNickname: String,
     targetId: String,
+    children: List<DeviceRepository.ChildDevice>,
+    selectedChildFid: String?,
+    onChildSelected: (String) -> Unit,
     lastSyncTime: Long?,
     refreshing: Boolean,
     onEditClick: () -> Unit,
     onRefreshClick: () -> Unit
 ) {
+    var switcherExpanded by remember { mutableStateOf(false) }
     val syncText = remember(lastSyncTime) {
         if (lastSyncTime != null) {
             val timeString = SimpleDateFormat("MMM dd, h:mm a", Locale.getDefault()).format(Date(lastSyncTime))
@@ -214,52 +225,88 @@ private fun CompactHeaderRow(
         } else "Waiting for sync..."
     }
 
-    // APPLIED THEME PADDING HERE FOR THE TOP 2 CARDS
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppTheme.PaddingBoxes)) {
-        // 1. Child Device Card (Blue)
-        Card(
-            modifier = Modifier
-                .weight(1f)
-                .height(84.dp)
-                .clickable { onEditClick() },
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = AppTheme.Primary)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.CenterVertically
+        // 1. Child Switcher Card (Blue) — tap to switch child, pencil to rename
+        Box(modifier = Modifier.weight(1f)) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(84.dp)
+                    .clickable { switcherExpanded = true },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = AppTheme.Primary)
             ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .padding(start = 16.dp, top = 12.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.Center
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(targetNickname, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(2.dp))
-                    Text("ID: $targetId", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(6.dp).background(AppTheme.Success, CircleShape))
-                        Spacer(Modifier.width(6.dp))
-                        Text(syncText, color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .padding(start = 16.dp, top = 12.dp, bottom = 12.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(targetNickname, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Switch child", tint = Color.White)
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text("ID: $targetId", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.size(6.dp).background(AppTheme.Success, CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                            Text(syncText, color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 16.dp)
+                            .size(36.dp)
+                            .background(Color.White.copy(alpha = 0.15f), CircleShape)
+                            .clip(CircleShape)
+                            .clickable { onEditClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Rounded.Edit, contentDescription = "Rename", tint = Color.White, modifier = Modifier.size(18.dp))
                     }
                 }
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    modifier = Modifier
-                        .padding(end = 16.dp)
-                        .size(36.dp)
-                        .background(Color.White.copy(alpha = 0.15f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Rounded.Edit, contentDescription = "Edit", tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+            DropdownMenu(
+                expanded = switcherExpanded,
+                onDismissRequest = { switcherExpanded = false }
+            ) {
+                children.forEach { child ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    child.name,
+                                    fontWeight = if (child.fid == selectedChildFid) FontWeight.Bold else FontWeight.Normal
+                                )
+                                Text(
+                                    "ID: ${child.displayUid ?: DeviceRepository.toDisplayCode(child.fid)}",
+                                    fontSize = 11.sp, color = Color.Gray
+                                )
+                            }
+                        },
+                        leadingIcon = {
+                            if (child.fid == selectedChildFid) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = AppTheme.Primary)
+                            }
+                        },
+                        onClick = {
+                            switcherExpanded = false
+                            onChildSelected(child.fid)
+                        }
+                    )
                 }
             }
         }
 
-        // 2. Sync Card (White)
+        // 2. Sync Card (White) — unchanged
         Card(
             modifier = Modifier.size(84.dp).clickable(enabled = !refreshing) { onRefreshClick() },
             shape = RoundedCornerShape(16.dp),

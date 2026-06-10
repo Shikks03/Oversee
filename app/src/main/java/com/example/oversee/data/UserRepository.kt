@@ -53,10 +53,4 @@ object UserRepository {
     fun updateDeviceId(context: Context, uid: String, newId: String, onComplete: (Boolean) -> Unit) {
         onComplete(false)
     }
-
-    fun linkChildDevice(context: Context, uid: String, childFid: String, onComplete: (Boolean) -> Unit) {
-        FirebaseUserManager.updateProfileField(uid, "child_device_fid", childFid) { success ->
-            onComplete(success)
-        }
-    }
 }
