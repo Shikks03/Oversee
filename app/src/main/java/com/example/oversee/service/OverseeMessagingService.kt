@@ -55,7 +55,7 @@ class OverseeMessagingService : FirebaseMessagingService() {
 
         Log.d(TAG, "High severity alert received from FCM")
         createNotificationChannel()
-        showIncidentNotification()
+        showIncidentNotification(message.data["child_fid"], message.data["child_name"])
 
         // --- NEW: Tell the open dashboard to refresh instantly! ---
         val refreshIntent = Intent("com.example.oversee.REFRESH_DASHBOARD").apply {
@@ -76,28 +76,29 @@ class OverseeMessagingService : FirebaseMessagingService() {
         manager.createNotificationChannel(channel)
     }
 
-    private fun showIncidentNotification() {
-        // CHANGED: Point the intent to MainActivity instead
+    private fun showIncidentNotification(childFid: String?, childName: String?) {
         val tapIntent = Intent(this, com.example.oversee.MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra("auto_refresh", true)
         }
         val pendingIntent = PendingIntent.getActivity(
-            this, 0, tapIntent,
+            this, childFid?.hashCode() ?: 0, tapIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val deviceLabel = if (childName.isNullOrBlank()) "the child's device" else "$childName's device"
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("High Severity Alert")
-            .setContentText("A high severity word has been detected on the child's device.")
+            .setContentText("A high severity word has been detected on $deviceLabel.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
 
         try {
-            NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
+            // Per-child notification ID so alerts from different children don't overwrite each other
+            NotificationManagerCompat.from(this).notify(childFid?.hashCode() ?: NOTIFICATION_ID, notification)
         } catch (e: SecurityException) {
             Log.w(TAG, "POST_NOTIFICATIONS permission not granted", e)
         }

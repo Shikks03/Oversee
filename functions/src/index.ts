@@ -63,10 +63,22 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res):
     parentDeviceRef = parentDeviceDoc.ref;
     const parentDeviceData = parentDeviceDoc.data()!;
 
-    const lastAlertTs: number = parentDeviceData.last_alert_ts ?? 0;
+    const childDeviceRef = admin.firestore()
+      .collection("users")
+      .doc(uid)
+      .collection("devices")
+      .doc(childFid);
+    const childDeviceDoc = await childDeviceRef.get();
+    const childData = childDeviceDoc.exists ? childDeviceDoc.data()! : {};
+    const childName: string = typeof childData.child_name === "string" && childData.child_name.length > 0
+      ? childData.child_name
+      : "your child";
+
+    // Per-child rate limit (was global on the parent device doc)
+    const lastAlertTs: number = childData.last_alert_ts ?? 0;
     const now = Date.now();
     if (now - lastAlertTs < RATE_LIMIT_MS) {
-      console.log(`Rate limit hit for uid ${uid}, skipping`);
+      console.log(`Rate limit hit for uid ${uid}, child ${childFid}, skipping`);
       res.status(200).send("Rate limited");
       return;
     }
@@ -83,6 +95,8 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res):
       data: {
         type: "HIGH_SEVERITY_INCIDENT",
         timestamp: String(now),
+        child_fid: childFid,
+        child_name: childName,
       },
       android: {
         priority: "high",
@@ -90,7 +104,7 @@ export const sendHighSeverityAlert = functions.https.onRequest(async (req, res):
     };
 
     await admin.messaging().send(message);
-    await parentDeviceRef.update({ last_alert_ts: now });
+    await childDeviceRef.set({ last_alert_ts: now }, { merge: true });
 
     console.log(`Alert sent to parent for uid ${uid}, child_fid ${childFid}`);
     res.status(200).send("Alert sent");
