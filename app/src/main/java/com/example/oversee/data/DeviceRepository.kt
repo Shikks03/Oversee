@@ -28,21 +28,73 @@ object DeviceRepository {
         return "%06d".format(Math.floorMod(fid.hashCode(), 1_000_000))
     }
 
-    fun getOrCreateDisplayUid(uid: String, onComplete: (String) -> Unit) {
+    /** One linked child phone, resolved for display. */
+    data class ChildDevice(val fid: String, val name: String, val displayUid: String?)
+
+    fun fetchChildDevices(context: Context, uid: String, onResult: (List<ChildDevice>) -> Unit) {
         FirebaseUserManager.fetchProfile(uid) { profile ->
-            val existing = profile?.get("child_display_uid") as? String
-            if (!existing.isNullOrBlank()) {
-                onComplete(existing)
-                return@fetchProfile
-            }
-            tryReserveDisplayUid(uid, onComplete)
+            val legacyFid = profile?.get("child_device_fid") as? String
+            val legacyDisplayUid = profile?.get("child_display_uid") as? String
+            db.collection("users").document(uid).collection("devices")
+                .get()
+                .addOnSuccessListener { snapshot ->
+                    val childDocs = snapshot.documents
+                        .filter { it.getString("role") == "CHILD" }
+                        .sortedBy { it.getLong("created_at") ?: 0L }
+                    val children = childDocs.mapIndexed { index, doc ->
+                        val fid = doc.id
+                        val storedName = doc.getString("child_name")
+                        val name = when {
+                            !storedName.isNullOrBlank() -> storedName
+                            fid == legacyFid -> AppPreferenceManager.getString(context, "target_nickname", "Child Device")
+                            else -> "Child ${index + 1}"
+                        }
+                        ChildDevice(fid, name, legacyDisplayUid.takeIf { fid == legacyFid })
+                    }.toMutableList()
+                    // Heal: legacy pointer exists but device doc is missing.
+                    if (legacyFid != null && children.none { it.fid == legacyFid }) {
+                        children.add(
+                            ChildDevice(
+                                legacyFid,
+                                AppPreferenceManager.getString(context, "target_nickname", "Child Device"),
+                                legacyDisplayUid
+                            )
+                        )
+                        writeDeviceDoc(uid, legacyFid, mapOf("role" to "CHILD", "created_at" to System.currentTimeMillis())) {}
+                    }
+                    onResult(children)
+                }
+                .addOnFailureListener { e ->
+                    Log.e(TAG, "fetchChildDevices failed: uid=$uid", e)
+                    onResult(emptyList())
+                }
         }
     }
 
-    private fun tryReserveDisplayUid(uid: String, onComplete: (String) -> Unit) {
-        val candidate = "%06d".format((100_000..999_999).random())
-        FirebaseUserManager.reserveDisplayUid(uid, candidate) { success ->
-            if (success) onComplete(candidate) else tryReserveDisplayUid(uid, onComplete)
+    fun renameChild(uid: String, fid: String, name: String, onComplete: (Boolean) -> Unit) {
+        writeDeviceDoc(uid, fid, mapOf("child_name" to name), onComplete)
+    }
+
+    fun deleteDeviceDoc(uid: String, fid: String, onComplete: (Boolean) -> Unit) {
+        db.collection("users").document(uid)
+            .collection("devices").document(fid)
+            .delete()
+            .addOnSuccessListener { onComplete(true) }
+            .addOnFailureListener { e ->
+                Log.e(TAG, "deleteDeviceDoc failed: uid=$uid fid=$fid", e)
+                onComplete(false)
+            }
+    }
+
+    /** Reserved 6-digit code for the legacy child; deterministic hash for everyone else. */
+    fun getDisplayUidForChild(uid: String, fid: String, onComplete: (String) -> Unit) {
+        FirebaseUserManager.fetchProfile(uid) { profile ->
+            val legacyFid = profile?.get("child_device_fid") as? String
+            val legacyDisplayUid = profile?.get("child_display_uid") as? String
+            onComplete(
+                if (fid == legacyFid && !legacyDisplayUid.isNullOrBlank()) legacyDisplayUid
+                else toDisplayCode(fid)
+            )
         }
     }
 
@@ -86,19 +138,25 @@ object DeviceRepository {
             .collection("devices").document(fid)
             .set(deviceData, SetOptions.merge())
             .addOnSuccessListener {
-                // Mirror the FID pointer on the family doc so either side can look up the other.
-                val fidField = if (role == "PARENT") "parent_device_fid" else "child_device_fid"
-                db.collection("users").document(uid)
-                    .set(mapOf(fidField to fid), SetOptions.merge())
-                    .addOnSuccessListener {
-                        AppPreferenceManager.saveString(context, "role", role)
-                        if (role == "CHILD") AppPreferenceManager.saveString(context, "parent_id", uid)
-                        onComplete(true)
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "setRoleForThisDevice: failed to mirror FID on family doc uid=$uid role=$role", e)
-                        onComplete(false)
-                    }
+                val finish = {
+                    AppPreferenceManager.saveString(context, "role", role)
+                    if (role == "CHILD") AppPreferenceManager.saveString(context, "parent_id", uid)
+                    onComplete(true)
+                }
+                if (role == "PARENT") {
+                    // Mirror the parent FID pointer on the family doc (read by the Cloud Function).
+                    db.collection("users").document(uid)
+                        .set(mapOf("parent_device_fid" to fid), SetOptions.merge())
+                        .addOnSuccessListener { finish() }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "setRoleForThisDevice: failed to mirror FID on family doc uid=$uid", e)
+                            onComplete(false)
+                        }
+                } else {
+                    // CHILD devices are tracked solely via their device doc; the legacy
+                    // child_device_fid scalar stays frozen as the legacy-child marker.
+                    finish()
+                }
             }
             .addOnFailureListener { e ->
                 Log.e(TAG, "setRoleForThisDevice: failed to write device doc uid=$uid fid=$fid", e)

@@ -73,22 +73,31 @@ object FirebaseIncidentManager {
      * Deletes the old child's encrypted logs and encryption key from the database
      * to prevent "Ghost Data" and save server storage.
      */
-    fun deleteOldChildData(oldFid: String) {
+    fun deleteOldChildData(oldFid: String, onComplete: (Boolean) -> Unit = {}) {
         val oldSessionRef = db.collection("monitor_sessions").document(oldFid)
 
-        // Find all the old logs and delete them in a batch
         oldSessionRef.collection("logs").get().addOnSuccessListener { snapshot ->
             val batch = db.batch()
             for (doc in snapshot.documents) {
                 batch.delete(doc.reference)
             }
             batch.commit().addOnSuccessListener {
-                // Once the logs are gone, delete the master document containing the encryption key
                 oldSessionRef.delete()
-                Log.d(TAG, "Successfully wiped old child data for FID: $oldFid")
+                    .addOnSuccessListener {
+                        Log.d(TAG, "Successfully wiped old child data for FID: $oldFid")
+                        onComplete(true)
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e(TAG, "Failed to delete session doc for FID: $oldFid", e)
+                        onComplete(false)
+                    }
+            }.addOnFailureListener { e ->
+                Log.e(TAG, "Failed to delete old log buckets", e)
+                onComplete(false)
             }
         }.addOnFailureListener { e ->
             Log.e(TAG, "Failed to delete old child data", e)
+            onComplete(false)
         }
     }
 }
