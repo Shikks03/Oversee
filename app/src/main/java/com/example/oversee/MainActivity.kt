@@ -39,6 +39,7 @@ import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.IncidentRepository
 import com.example.oversee.data.UserRepository
 import com.example.oversee.data.local.AppPreferenceManager
+import com.example.oversee.data.remote.FirebaseIncidentManager
 import com.example.oversee.data.remote.FirebaseSyncManager
 import com.example.oversee.data.remote.FirebaseUserManager
 import com.example.oversee.ui.child.ChildDashboardRoute
@@ -108,11 +109,10 @@ fun AppRouter() {
                                     "CHILD" -> {
                                         DeviceRepository.getFid { currentFid ->
                                             if (currentFid != null) {
-                                                FirebaseUserManager.fetchDeviceFidPointers(uid) { _, storedChildFid, _ ->
-                                                    if (storedChildFid != currentFid) {
-                                                        DeviceRepository.setRoleForThisDevice(context, uid, currentFid, "CHILD") {}
-                                                    }
-                                                }
+                                                DeviceRepository.writeDeviceDoc(
+                                                    uid, currentFid,
+                                                    mapOf("role" to "CHILD", "last_seen" to System.currentTimeMillis())
+                                                ) {}
                                             }
                                         }
                                         navController.navigate("child_dashboard") { popUpTo("splash") { inclusive = true } }
@@ -233,11 +233,6 @@ fun AppRouter() {
                 } else null
             }
         ) {
-            // --- NEW: STATE FOR THE TRANSFER DIALOG ---
-            var showTransferDialog by remember { mutableStateOf(false) }
-            var pendingNewFid by remember { mutableStateOf<String?>(null) }
-            var existingOldFid by remember { mutableStateOf<String?>(null) }
-
             RoleSelectionScreen(
                 user = userName,
                 onSelectChild = {
@@ -251,17 +246,9 @@ fun AppRouter() {
                             val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
                                 Toast.makeText(context, "Request timed out. Please try again.", Toast.LENGTH_SHORT).show()
                             }
-                            FirebaseUserManager.fetchDeviceFidPointers(uid) { _, existingChildFid, _ ->
+                            DeviceRepository.setRoleForThisDevice(context, uid, newFid, "CHILD") { success ->
                                 cancelTimeout()
-                                if (existingChildFid != null && existingChildFid != newFid) {
-                                    existingOldFid = existingChildFid
-                                    pendingNewFid = newFid
-                                    showTransferDialog = true
-                                } else {
-                                    DeviceRepository.setRoleForThisDevice(context, uid, newFid, "CHILD") { success ->
-                                        if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
-                                    }
-                                }
+                                if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
                             }
                         }
                     }
@@ -286,31 +273,6 @@ fun AppRouter() {
                 }
             )
 
-            // --- NEW: THE TRANSFER CONFIRMATION POP-UP ---
-            if (showTransferDialog) {
-                // Re-using your excellent OverSeeDialog component!
-                com.example.oversee.ui.components.dialogs.OverSeeDialog(
-                    title = "Device Already Linked",
-                    description = "This account already has an existing child device linked. Do you want to transfer data and link this device instead?\n\n(Old logs will be securely deleted).",
-                    confirmText = "Transfer & Link",
-                    dismissText = "Cancel",
-                    isDestructive = false,
-                    onConfirm = {
-                        showTransferDialog = false
-                        val uid = AuthRepository.getUserId()
-                        if (uid != null && pendingNewFid != null && existingOldFid != null) {
-                            // 1. Wipe the old Ghost Data to save server costs
-                            com.example.oversee.data.remote.FirebaseIncidentManager.deleteOldChildData(existingOldFid!!)
-
-                            // 2. Link this new device
-                            DeviceRepository.setRoleForThisDevice(context, uid, pendingNewFid!!, "CHILD") { success ->
-                                if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
-                            }
-                        }
-                    },
-                    onDismiss = { showTransferDialog = false }
-                )
-            }
         }
 
         // 5. PARENT DASHBOARD ROUTE (Real Firebase Logic Added)
@@ -322,8 +284,8 @@ fun AppRouter() {
                 } else null
             }
         ) {
-            var childFid by remember { mutableStateOf<String?>(null) }
-            var childDisplayUid by remember { mutableStateOf<String?>(null) }
+            val children = remember { mutableStateListOf<DeviceRepository.ChildDevice>() }
+            var selectedChildFid by remember { mutableStateOf<String?>(null) }
             val incidents = remember { mutableStateListOf<FirebaseSyncManager.LogEntry>() }
             var isRefreshing by remember { mutableStateOf(false) }
 
@@ -343,12 +305,16 @@ fun AppRouter() {
                             isRefreshing = false
                             Toast.makeText(context, "Request timed out. Please try again.", Toast.LENGTH_SHORT).show()
                         }
-                        FirebaseUserManager.fetchDeviceFidPointers(uid) { _, cFid, cDisplayUid ->
-                            childFid = cFid
-                            childDisplayUid = cDisplayUid
-                            if (cFid != null) {
-                                FirebaseSyncManager.requestChildSync(cFid)
-                                IncidentRepository.fetchRecentIncidents(context, cFid, onSuccess = { logs ->
+                        DeviceRepository.fetchChildDevices(context, uid) { list ->
+                            children.clear()
+                            children.addAll(list)
+                            val saved = AppPreferenceManager.getString(context, "selected_child_fid", "")
+                            val selected = list.firstOrNull { it.fid == saved } ?: list.firstOrNull()
+                            selectedChildFid = selected?.fid
+                            if (selected != null) {
+                                AppPreferenceManager.saveString(context, "selected_child_fid", selected.fid)
+                                FirebaseSyncManager.requestChildSync(selected.fid)
+                                IncidentRepository.fetchRecentIncidents(context, selected.fid, onSuccess = { logs ->
                                     cancelTimeout()
                                     incidents.clear()
                                     incidents.addAll(logs)
@@ -399,8 +365,8 @@ fun AppRouter() {
             // requestChildSync fires and the child responds asynchronously. This listener catches
             // the child's upload regardless of timing — the initial snapshot handles "already
             // uploaded", and subsequent snapshots handle "uploaded after open".
-            DisposableEffect(childFid) {
-                val fid = childFid ?: return@DisposableEffect onDispose {}
+            DisposableEffect(selectedChildFid) {
+                val fid = selectedChildFid ?: return@DisposableEffect onDispose {}
                 val listener = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                     .collection("monitor_sessions").document(fid).collection("logs")
                     .addSnapshotListener { _, error ->
@@ -421,7 +387,7 @@ fun AppRouter() {
                 }
             }
 
-            if (childFid == null) {
+            if (children.isEmpty()) {
                 ChildNotLinkedScreen(
                     onLogout = {
                         AuthRepository.logout(context)
@@ -430,12 +396,57 @@ fun AppRouter() {
                     onCheckAgain = { loadData() }
                 )
             } else {
+                val onChildSelected: (String) -> Unit = { fid ->
+                    if (fid != selectedChildFid) {
+                        AppPreferenceManager.saveString(context, "selected_child_fid", fid)
+                        incidents.clear()
+                        selectedChildFid = fid
+                        loadData()
+                    }
+                }
                 ParentDashboardScreen(
-                    targetId = childDisplayUid ?: DeviceRepository.toDisplayCode(childFid),
-                    targetNickname = AppPreferenceManager.getString(context, "target_nickname", "Child Device"),
+                    children = children.toList(),
+                    selectedChildFid = selectedChildFid,
                     incidents = incidents.toList(),
                     refreshing = isRefreshing,
                     onRefresh = { loadData() },
+                    onChildSelected = onChildSelected,
+                    onRenameChild = { newName ->
+                        val fid = selectedChildFid
+                        val uid2 = AuthRepository.getUserId()
+                        if (fid != null && uid2 != null) {
+                            DeviceRepository.renameChild(uid2, fid, newName) { success ->
+                                if (success) {
+                                    val i = children.indexOfFirst { it.fid == fid }
+                                    if (i >= 0) children[i] = children[i].copy(name = newName)
+                                    if (children.getOrNull(i)?.displayUid != null) {
+                                        AppPreferenceManager.saveString(context, "target_nickname", newName)
+                                    }
+                                } else {
+                                    android.widget.Toast.makeText(context, "Failed to save name", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                    onRemoveChild = { child ->
+                        val uid2 = AuthRepository.getUserId()
+                        if (uid2 != null) {
+                            isRefreshing = true
+                            FirebaseIncidentManager.deleteOldChildData(child.fid) {
+                                DeviceRepository.deleteDeviceDoc(uid2, child.fid) {
+                                    FirebaseUserManager.fetchProfile(uid2) { profile ->
+                                        if ((profile?.get("child_device_fid") as? String) == child.fid) {
+                                            FirebaseUserManager.deleteProfileField(uid2, "child_device_fid") {}
+                                        }
+                                        if (AppPreferenceManager.getString(context, "selected_child_fid", "") == child.fid) {
+                                            AppPreferenceManager.saveString(context, "selected_child_fid", "")
+                                        }
+                                        loadData()
+                                    }
+                                }
+                            }
+                        }
+                    },
                     onLogoutClick = {
                         AuthRepository.logout(context)
                         navController.navigate("auth") { popUpTo(0) }
