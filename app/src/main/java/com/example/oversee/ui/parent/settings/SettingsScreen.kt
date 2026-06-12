@@ -15,11 +15,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oversee.data.DeviceRepository
+import com.example.oversee.data.UserRepository
 import com.example.oversee.ui.components.dialogs.OverSeeDialog
 import com.example.oversee.ui.theme.AppTheme
 
@@ -33,6 +35,9 @@ fun SettingsScreen(
     onHelpSupportClick: () -> Unit,
     onPrivacyPolicyClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val parentEmail = UserRepository.getLocalEmail(context).ifBlank { "—" }
+
     var showRemovePicker by remember { mutableStateOf(false) }
     var removeCandidate by remember { mutableStateOf<DeviceRepository.ChildDevice?>(null) }
 
@@ -44,6 +49,8 @@ fun SettingsScreen(
 
         // 1. Account & Data
         SettingsGroup("Account") {
+            SettingsInfoItem(Icons.Default.Email, "Account Email", parentEmail)
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = AppTheme.Border)
             SettingsItem(Icons.AutoMirrored.Filled.ExitToApp, "Log Out", "Sign out of your parent account", isDestructive = true, onClick = onLogoutClick)
         }
 
@@ -135,5 +142,16 @@ private fun SettingsItem(icon: androidx.compose.ui.graphics.vector.ImageVector, 
             Text(subtitle, fontSize = 12.sp, color = Color.Gray)
         }
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.LightGray)
+    }
+}
+
+@Composable
+private fun SettingsInfoItem(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = Color.Gray)
+        Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+            Text(label, fontWeight = FontWeight.Bold, color = Color.Black)
+            Text(value, fontSize = 12.sp, color = Color.Gray)
+        }
     }
 }
