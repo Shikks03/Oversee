@@ -267,9 +267,9 @@ fun SettingsRow(
 @Composable
 fun MonitoringRulesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    var timeoutEnabled by remember { mutableStateOf(AppPreferenceManager.getBoolean(context, "timeout_enabled", true)) }
+    var timeoutEnabled by remember { mutableStateOf(AppPreferenceManager.getBoolean(context, "timeout_enabled", false)) }
     var blockDuration by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "block_duration_mins", 5L)) }
-    var burstThreshold by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "burst_threshold", 50L)) }
+    var burstThreshold by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "burst_threshold", 55L)) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
@@ -310,22 +310,22 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
                 // --- SECTION 1: TIMEOUT DURATION ---
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Text("Penalty Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
-                        Text("Time blocked after a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
-
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            listOf(1L, 5L, 15L, 30L).forEach { mins ->
-                                FilterChip(
-                                    selected = blockDuration == mins,
-                                    enabled = timeoutEnabled,
-                                    onClick = {
-                                        blockDuration = mins
-                                        AppPreferenceManager.saveLong(context, "block_duration_mins", mins)
-                                    },
-                                    label = { Text("${mins}m") }
-                                )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Penalty Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
+                                Text("Time blocked after a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
                             }
+                            Text("${blockDuration}m", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (timeoutEnabled) AppTheme.ChildAccent else Color.LightGray)
                         }
+
+                        Slider(
+                            value = blockDuration.toFloat(),
+                            onValueChange = { blockDuration = it.toLong() },
+                            onValueChangeFinished = { AppPreferenceManager.saveLong(context, "block_duration_mins", blockDuration) },
+                            valueRange = 1f..30f,
+                            steps = 28,
+                            enabled = timeoutEnabled
+                        )
                     }
                 }
 
@@ -334,21 +334,22 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
                 // --- SECTION 2: BURST THRESHOLD ---
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Text("High-Risk Burst Threshold", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
-                        Text("Trigger a penalty if this many flags happen within 5 minutes.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
-
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            listOf(10L, 25L, 50L, 100L).forEach { threshold ->
-                                FilterChip(
-                                    selected = burstThreshold == threshold,
-                                    onClick = {
-                                        burstThreshold = threshold
-                                        AppPreferenceManager.saveLong(context, "burst_threshold", threshold)
-                                    },
-                                    label = { Text("$threshold") }
-                                )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("High-Risk Burst Threshold", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
+                                Text("Trigger a penalty if this many flags happen within 5 minutes.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
                             }
+                            Text("$burstThreshold", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (timeoutEnabled) AppTheme.ChildAccent else Color.LightGray)
                         }
+
+                        Slider(
+                            value = burstThreshold.toFloat(),
+                            onValueChange = { burstThreshold = it.toLong() },
+                            onValueChangeFinished = { AppPreferenceManager.saveLong(context, "burst_threshold", burstThreshold) },
+                            valueRange = 10f..100f,
+                            steps = 17,
+                            enabled = timeoutEnabled
+                        )
                     }
                 }
             }

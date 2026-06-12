@@ -166,7 +166,10 @@ class ScreenCaptureService : Service() {
                 val currentId = attemptCount.incrementAndGet()
                 Log.d(TAG, "System: Capture Cycle #$currentId started")
 
-                val image = try { imageReader.acquireLatestImage() } catch (e: Exception) { null }
+                val image = try { imageReader.acquireLatestImage() } catch (e: Exception) {
+                    sendConsoleUpdate("Error: Capture exception — ${e.javaClass.simpleName}")
+                    null
+                }
                 if (image != null) {
                     successCaptureCount.incrementAndGet()
                     val bitmap = imageToBitmap(image)
@@ -175,6 +178,8 @@ class ScreenCaptureService : Service() {
                     if (bitmap != null) {
                         ocrExecutor.execute { runOcr(bitmap, currentId) }
                     }
+                } else if (currentId <= 3 || currentId % 15 == 0) {
+                    sendConsoleUpdate("Debug: Cycle #$currentId — no frame yet (service running, waiting for display)")
                 }
             } else {
                 if (overlayView != null) handler.post { removeOverlay() }
@@ -194,9 +199,9 @@ class ScreenCaptureService : Service() {
         val startTime = System.currentTimeMillis()
 
         // Fetch preferences dynamically inside the scope
-        val timeoutEnabled = try { AppPreferenceManager.getBoolean(applicationContext, "timeout_enabled", true) } catch (e: Exception) { true }
+        val timeoutEnabled = try { AppPreferenceManager.getBoolean(applicationContext, "timeout_enabled", false) } catch (e: Exception) { false }
         val blockMins = try { AppPreferenceManager.getLong(applicationContext, "block_duration_mins", 5L) } catch (e: Exception) { 5L }
-        val burstThreshold = try { AppPreferenceManager.getLong(applicationContext, "burst_threshold", 50L) } catch (e: Exception) { 50L }
+        val burstThreshold = try { AppPreferenceManager.getLong(applicationContext, "burst_threshold", 55L) } catch (e: Exception) { 55L }
 
         val cropped = if (topInset + bottomInset > 0) {
             val cropHeight = bitmap.height - topInset - bottomInset
@@ -224,6 +229,7 @@ class ScreenCaptureService : Service() {
                 Log.d(TAG, "ML Kit OCR #$id (${duration}ms) - Length: ${visionText.text.length}\nScanned Text:\n${visionText.text}")
 
                 if (visionText.text.isNotBlank()) {
+                    sendConsoleUpdate("OCR #$id: scanned ${visionText.text.length} chars (${duration}ms)")
                     val analysisResult = textAnalysisEngine.analyze(visionText.text)
                     val scoredWords = ToxicityScorer.score(analysisResult)
 
