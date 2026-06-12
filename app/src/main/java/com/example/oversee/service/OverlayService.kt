@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oversee.ui.child.CapturePermissionActivity
+import androidx.compose.material3.lightColorScheme
+
 
 class OverlayService : Service() {
 
@@ -89,8 +91,14 @@ class OverlayService : Service() {
                 val lifecycleOwner = ServiceLifecycleOwner()
                 lifecycleOwner.attachToView(this)
 
+                // --- PREVENT SYSTEM DARK MODE FROM INVERTING COLORS ---
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    isForceDarkAllowed = false
+                }
+
                 setContent {
-                    MaterialTheme {
+                    // --- FORCE LIGHT THEME TO IGNORE SYSTEM NIGHT MODE ---
+                    MaterialTheme(colorScheme = lightColorScheme()) {
                         OverseeOverlay(
                             mode = currentMode,
                             onPrimaryClick = {
@@ -98,7 +106,7 @@ class OverlayService : Service() {
                                 else handleDecline()
                             },
                             onSecondaryClick = { handleDecline() },
-                            onTimerComplete = { removeBlocker() } // Dissolves the overlay seamlessly!
+                            onTimerComplete = { removeBlocker() }
                         )
                     }
                 }
@@ -139,7 +147,7 @@ fun OverseeOverlay(
     mode: String,
     onPrimaryClick: () -> Unit,
     onSecondaryClick: () -> Unit,
-    onTimerComplete: () -> Unit = {} // Added default empty lambda for backward compatibility
+    onTimerComplete: () -> Unit = {}
 ) {
     val isWarning = mode == OverlayService.MODE_SEVERE_WARNING
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -159,12 +167,16 @@ fun OverseeOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(if (isWarning) Color(0xD9000000) else Color.Black.copy(alpha = 0.85f)),
+            .background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Card(
             modifier = Modifier.padding(32.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            // THE FIX: Solid Red for Timeout, Solid Blue for Standard.
+            // Android's Force Dark ignores highly saturated colors!
+            colors = CardDefaults.cardColors(
+                containerColor = if (isWarning) Color(0xFFD32F2F) else Color(0xFF1976D2)
+            ),
             shape = RoundedCornerShape(16.dp),
             elevation = CardDefaults.cardElevation(8.dp)
         ) {
@@ -172,45 +184,76 @@ fun OverseeOverlay(
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // All text is pure white so it pops perfectly against the red/blue
                 Text(
                     text = if (isWarning && timeLeftSecs > 0) "Timeout Active" else if (isWarning) "Break Complete" else "Monitoring Required",
-                    fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.Black
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (isWarning && timeLeftSecs > 0) {
                     val mins = timeLeftSecs / 60
                     val secs = timeLeftSecs % 60
-                    Text("We noticed some highly negative interactions.", fontSize = 14.sp, color = Color.Gray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Text(
+                        text = "We noticed some highly negative interactions.",
+                        fontSize = 14.sp,
+                        color = Color(0xFFEEEEEE), // Slightly off-white
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
                     Spacer(Modifier.height(16.dp))
-                    Text(String.format(java.util.Locale.US, "%02d:%02d", mins, secs), fontSize = 36.sp, fontWeight = FontWeight.Black, color = Color(0xFFD32F2F))
+                    Text(
+                        text = String.format(java.util.Locale.US, "%02d:%02d", mins, secs),
+                        fontSize = 42.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
                 } else {
                     Text(
                         text = if (isWarning) "You may now return to the app. Please be mindful of your interactions." else "To use Facebook, you must enable screen monitoring.",
-                        fontSize = 16.sp, color = Color.Gray,
+                        fontSize = 16.sp,
+                        color = Color(0xFFEEEEEE),
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                // The primary button is White, with the text colored Red or Blue to match the theme
                 Button(
                     onClick = {
-                        // FIX: Check if they are clicking the button after the timer is complete
                         if (isWarning && timeLeftSecs <= 0) onTimerComplete() else onPrimaryClick()
                     },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isWarning) Color(0xFF1976D2) else Color(0xFFD32F2F)
+                        containerColor = Color.White
                     )
                 ) {
-                    Text(if (isWarning && timeLeftSecs > 0) "Exit App" else if (isWarning) "Return to Facebook" else "Enable & Continue", color = Color.White)
+                    Text(
+                        text = if (isWarning && timeLeftSecs > 0) "Exit App" else if (isWarning) "Return to Facebook" else "Enable & Continue",
+                        color = if (isWarning) Color(0xFFD32F2F) else Color(0xFF1976D2),
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 if (!isWarning) {
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(onClick = onSecondaryClick, modifier = Modifier.fillMaxWidth()) {
-                        Text("Not Now (Exit App)", color = Color.Gray)
+                        Text("Not Now (Exit App)", color = Color(0xFFBBDEFB)) // Light blue text
+                    }
+                } else if (isWarning && timeLeftSecs > 0) {
+                    // --- DEBUG BYPASS ---
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = {
+                            com.example.oversee.data.local.AppPreferenceManager.saveLong(context, "app_unlock_time", 0L)
+                            timeLeftSecs = 0L
+                            onTimerComplete()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Debug: bypass timer", color = Color(0xFFFFCDD2), fontSize = 12.sp) // Light red text
                     }
                 }
             }

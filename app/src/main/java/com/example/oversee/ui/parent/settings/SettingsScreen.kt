@@ -29,8 +29,6 @@ fun SettingsScreen(
     onHelpSupportClick: () -> Unit,
     onPrivacyPolicyClick: () -> Unit = {}
 ) {
-    var showUnlinkDialog by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppTheme.PaddingDefault),
         verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -45,7 +43,6 @@ fun SettingsScreen(
         // 2. Device Management
         SettingsGroup("Device Management") {
             SettingsItem(Icons.Default.History, "Syncing History", "View past data synchronizations", onClick = onSyncHistoryClick)
-            SettingsItem(Icons.Default.LinkOff, "Unlink Device", "Stop monitoring the current child device", isDestructive = true, onClick = { showUnlinkDialog = true })
         }
 
         // 3. Security & Control
@@ -66,23 +63,6 @@ fun SettingsScreen(
             SettingsItem(Icons.Default.BugReport, "Reset Role Selection", "Return to Parent/Child selection", onClick = onDebugResetRole)
         }
         Spacer(Modifier.height(40.dp))
-    }
-
-    if (showUnlinkDialog) {
-        AlertDialog(
-            onDismissRequest = { showUnlinkDialog = false },
-            title = { Text("Unlink Device?", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to stop monitoring this child device? This will stop all incoming data.") },
-            confirmButton = {
-                Button(
-                    onClick = { showUnlinkDialog = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Error)
-                ) { Text("Unlink") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showUnlinkDialog = false }) { Text("Cancel") }
-            }
-        )
     }
 }
 

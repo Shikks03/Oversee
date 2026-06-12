@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oversee.ui.components.inputs.OverSeePinPad
 import com.example.oversee.ui.theme.AppTheme
+import androidx.compose.ui.draw.alpha
 
 // =========================================================================
 // 1. CHILD LINK SETUP SCREEN
@@ -94,6 +95,15 @@ fun SmartPinSetupFlow(onPinSaved: (String) -> Unit) {
                 onPinComplete = { entered ->
                     tempPin = entered
                     stage = "CONFIRM_NEW"
+                },
+                bottomContent = {
+                    // Invisible button to maintain exact same bottom spacing as the Confirm screen
+                    TextButton(
+                        onClick = { },
+                        modifier = Modifier.alpha(0f)
+                    ) {
+                        Text("Start Over", fontWeight = FontWeight.Bold)
+                    }
                 }
             )
         }

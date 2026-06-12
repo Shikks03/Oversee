@@ -27,6 +27,9 @@ import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.ui.components.dialogs.OverSeeDialog
 import com.example.oversee.ui.theme.AppTheme
 import com.example.oversee.utils.readAssetFile
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.TextStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -261,15 +264,24 @@ fun SettingsRow(
 }
 
 // =========================================================================
-// NEW: DEDICATED MONITORING RULES SCREEN
+// DEDICATED MONITORING RULES SCREEN
 // =========================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonitoringRulesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var timeoutEnabled by remember { mutableStateOf(AppPreferenceManager.getBoolean(context, "timeout_enabled", true)) }
-    var blockDuration by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "block_duration_mins", 5L)) }
-    var burstThreshold by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "burst_threshold", 50L)) }
+
+    var blockDuration by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "block_duration_mins", 4L)) }
+    var burstThreshold by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "burst_threshold", 25L)) }
+
+    // State for smooth slider dragging
+    var sliderBlockDuration by remember { mutableFloatStateOf(blockDuration.toFloat()) }
+    var sliderBurstThreshold by remember { mutableFloatStateOf(burstThreshold.toFloat()) }
+
+    // State for the text fields
+    var textBlockDuration by remember { mutableStateOf(blockDuration.toString()) }
+    var textBurstThreshold by remember { mutableStateOf(burstThreshold.toString()) }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
@@ -310,22 +322,61 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
                 // --- SECTION 1: TIMEOUT DURATION ---
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Text("Penalty Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
-                        Text("Time blocked after a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
-
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            listOf(1L, 5L, 15L, 30L).forEach { mins ->
-                                FilterChip(
-                                    selected = blockDuration == mins,
-                                    enabled = timeoutEnabled,
-                                    onClick = {
-                                        blockDuration = mins
-                                        AppPreferenceManager.saveLong(context, "block_duration_mins", mins)
-                                    },
-                                    label = { Text("${mins}m") }
-                                )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                                Text("Penalty Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
+                                Text("Time blocked after a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
                             }
+
+                            // Numeric Input Field
+                            OutlinedTextField(
+                                value = textBlockDuration,
+                                onValueChange = { input ->
+                                    val digits = input.filter { it.isDigit() }
+                                    textBlockDuration = digits
+                                    val parsed = digits.toFloatOrNull()
+                                    if (parsed != null && parsed in 1f..60f) {
+                                        sliderBlockDuration = parsed
+                                        blockDuration = parsed.toLong()
+                                        AppPreferenceManager.saveLong(context, "block_duration_mins", blockDuration)
+                                    }
+                                },
+                                enabled = timeoutEnabled,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.width(90.dp),
+                                textStyle = TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+                                suffix = { Text("m", color = Color.Gray, fontWeight = FontWeight.Bold) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AppTheme.ChildAccent,
+                                    unfocusedBorderColor = Color.LightGray
+                                )
+                            )
                         }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Slider(
+                            value = sliderBlockDuration,
+                            onValueChange = {
+                                sliderBlockDuration = it
+                                textBlockDuration = it.toLong().toString()
+                            },
+                            onValueChangeFinished = {
+                                blockDuration = sliderBlockDuration.toLong()
+                                AppPreferenceManager.saveLong(context, "block_duration_mins", blockDuration)
+                            },
+                            valueRange = 1f..60f,
+                            enabled = timeoutEnabled,
+                            colors = SliderDefaults.colors(
+                                thumbColor = AppTheme.ChildAccent,
+                                activeTrackColor = AppTheme.ChildAccent,
+                                inactiveTrackColor = AppTheme.ChildAccentLight,
+                                disabledThumbColor = Color.LightGray,
+                                disabledActiveTrackColor = Color.LightGray,
+                                disabledInactiveTrackColor = Color(0xFFEEEEEE)
+                            )
+                        )
                     }
                 }
 
@@ -334,21 +385,55 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
                 // --- SECTION 2: BURST THRESHOLD ---
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                     Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Text("High-Risk Burst Threshold", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
-                        Text("Trigger a penalty if this many flags happen within 5 minutes.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
-
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            listOf(10L, 25L, 50L, 100L).forEach { threshold ->
-                                FilterChip(
-                                    selected = burstThreshold == threshold,
-                                    onClick = {
-                                        burstThreshold = threshold
-                                        AppPreferenceManager.saveLong(context, "burst_threshold", threshold)
-                                    },
-                                    label = { Text("$threshold") }
-                                )
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                                Text("High-Risk Burst Threshold", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
+                                Text("Trigger a penalty if this many flags happen within 5 minutes.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
                             }
+
+                            // Numeric Input Field
+                            OutlinedTextField(
+                                value = textBurstThreshold,
+                                onValueChange = { input ->
+                                    val digits = input.filter { it.isDigit() }
+                                    textBurstThreshold = digits
+                                    val parsed = digits.toFloatOrNull()
+                                    if (parsed != null && parsed in 5f..100f) {
+                                        sliderBurstThreshold = parsed
+                                        burstThreshold = parsed.toLong()
+                                        AppPreferenceManager.saveLong(context, "burst_threshold", burstThreshold)
+                                    }
+                                },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.width(90.dp),
+                                textStyle = TextStyle(fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = AppTheme.ChildAccent,
+                                    unfocusedBorderColor = Color.LightGray
+                                )
+                            )
                         }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Slider(
+                            value = sliderBurstThreshold,
+                            onValueChange = {
+                                sliderBurstThreshold = it
+                                textBurstThreshold = it.toLong().toString()
+                            },
+                            onValueChangeFinished = {
+                                burstThreshold = sliderBurstThreshold.toLong()
+                                AppPreferenceManager.saveLong(context, "burst_threshold", burstThreshold)
+                            },
+                            valueRange = 5f..100f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = AppTheme.ChildAccent,
+                                activeTrackColor = AppTheme.ChildAccent,
+                                inactiveTrackColor = AppTheme.ChildAccentLight
+                            )
+                        )
                     }
                 }
             }
@@ -357,7 +442,7 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
 }
 
 // =========================================================================
-// EXISTING DIALOGS
+// DIALOGS & SUBDIALOGS
 // =========================================================================
 @Composable
 fun HowToUseDialog(onDismiss: () -> Unit) {
