@@ -51,6 +51,7 @@ fun DashboardOverviewScreen(
     onRefresh: () -> Unit,
     onDateRangeChanged: (Long, Long) -> Unit,
     onEditClick: () -> Unit,
+    onAddChildClick: () -> Unit,
     onNavigateToLogs: () -> Unit,
     onNotificationClick: () -> Unit
 ) {
@@ -92,6 +93,7 @@ fun DashboardOverviewScreen(
                 lastSyncTime = lastSyncTime,
                 refreshing = refreshing,
                 onEditClick = onEditClick,
+                onAddChildClick = onAddChildClick,
                 onRefreshClick = onRefresh
             )
 
@@ -215,6 +217,7 @@ private fun CompactHeaderRow(
     lastSyncTime: Long?,
     refreshing: Boolean,
     onEditClick: () -> Unit,
+    onAddChildClick: () -> Unit,
     onRefreshClick: () -> Unit
 ) {
     var switcherExpanded by remember { mutableStateOf(false) }
@@ -303,6 +306,15 @@ private fun CompactHeaderRow(
                         }
                     )
                 }
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Add Child Device", fontWeight = FontWeight.Bold) },
+                    leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    onClick = {
+                        switcherExpanded = false
+                        onAddChildClick()
+                    }
+                )
             }
         }
 

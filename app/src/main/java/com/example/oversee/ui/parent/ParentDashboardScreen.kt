@@ -46,6 +46,7 @@ fun ParentDashboardScreen(
     var currentTab by remember { mutableIntStateOf(initialTab) }
     var showEditDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showAddChildDialog by remember { mutableStateOf(false) }
 
     val selectedChild = children.firstOrNull { it.fid == selectedChildFid }
     val targetNickname = selectedChild?.name ?: "Child Device"
@@ -93,6 +94,7 @@ fun ParentDashboardScreen(
                     startDate = sharedStartDate, endDate = sharedEndDate, refreshing = refreshing,
                     onRefresh = onRefreshAndExtendRange, onDateRangeChanged = { start, end -> sharedStartDate = start; sharedEndDate = end },
                     onEditClick = { showEditDialog = true },
+                    onAddChildClick = { showAddChildDialog = true },
                     onNavigateToLogs = { currentTab = 2 }, onNotificationClick = { currentTab = 5 }
                 )
                 1 -> InsightDetailsScreen(incidents = incidents)
@@ -108,6 +110,7 @@ fun ParentDashboardScreen(
                     onDebugResetRole = onDebugResetRole,
                     onSyncHistoryClick = { currentTab = 6 },
                     onHelpSupportClick = { currentTab = 14 },
+                    onAddChildClick = { showAddChildDialog = true },
                     onPrivacyPolicyClick = { currentTab = 15 }
                 )
                 // Settings Sub-Routes
@@ -136,6 +139,16 @@ fun ParentDashboardScreen(
                 onConfirm = { newName ->
                     onRenameChild(newName.ifBlank { "Child Device" })
                     showEditDialog = false
+                }
+            )
+        }
+
+        if (showAddChildDialog) {
+            AddChildDialog(
+                onDismiss = { showAddChildDialog = false },
+                onApproved = {
+                    showAddChildDialog = false
+                    onRefreshAndExtendRange()
                 }
             )
         }

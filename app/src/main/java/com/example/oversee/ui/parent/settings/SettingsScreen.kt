@@ -33,6 +33,7 @@ fun SettingsScreen(
     onDebugResetRole: () -> Unit,
     onSyncHistoryClick: () -> Unit,
     onHelpSupportClick: () -> Unit,
+    onAddChildClick: () -> Unit,
     onPrivacyPolicyClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -57,6 +58,9 @@ fun SettingsScreen(
         // 2. Device Management
         SettingsGroup("Device Management") {
             SettingsItem(Icons.Default.History, "Syncing History", "View past data synchronizations", onClick = onSyncHistoryClick)
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = AppTheme.Border)
+            SettingsItem(Icons.Default.PersonAdd, "Add Child Device", "Pair a new device using its 6-digit code", onClick = onAddChildClick)
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = AppTheme.Border)
             SettingsItem(Icons.Default.LinkOff, "Remove Child Device", "Stop monitoring and delete a child's data", isDestructive = true, onClick = { showRemovePicker = true })
         }
 
