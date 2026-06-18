@@ -65,12 +65,15 @@ object KeyManager {
                 cachedKey = remoteKey
                 onReady(remoteKey)
             } else {
-                // No key exists yet — generate one (child device first run)
+                // Key not found — generate a new one. Any existing log data encrypted
+                // with the lost key is unreadable, so purge stale log buckets first.
                 val newKey = CryptoManager.generateKey()
                 storeKeyLocally(context, newKey)
                 cachedKey = newKey
-                uploadKeyToFirestore(deviceId, newKey) { success ->
-                    if (!success) Log.e(TAG, "Failed to upload encryption key to Firestore")
+                deleteStaleLogs(deviceId) {
+                    uploadKeyToFirestore(deviceId, newKey) { success ->
+                        if (!success) Log.e(TAG, "Failed to upload encryption key to Firestore")
+                    }
                 }
                 onReady(newKey)
             }
@@ -103,6 +106,31 @@ object KeyManager {
             }
             onReady(remoteKey)
         }
+    }
+
+    /**
+     * Forces a fresh key fetch from Firestore, discarding any cached/local copy.
+     * Use when a previously cached key fails to decrypt data (the child has
+     * rotated its key since the parent last cached it). Returns null if Firestore
+     * has no usable key.
+     */
+    fun refreshKeyForDevice(context: Context, deviceId: String, onReady: (SecretKey?) -> Unit) {
+        restoreSession(context)
+        keyCache.remove(deviceId)
+        clearLocalKeyForDevice(context, deviceId)
+        fetchKeyFromFirestore(deviceId) { remoteKey ->
+            if (remoteKey != null) {
+                storeLocalKeyForDevice(context, deviceId, remoteKey)
+                keyCache[deviceId] = remoteKey
+            } else {
+                Log.w(TAG, "refreshKeyForDevice: no usable key in Firestore for deviceId=$deviceId")
+            }
+            onReady(remoteKey)
+        }
+    }
+
+    private fun clearLocalKeyForDevice(context: Context, deviceId: String) {
+        AppPreferenceManager.saveString(context, "key_$deviceId", "")
     }
 
     fun restoreSession(context: Context) {
@@ -191,6 +219,7 @@ object KeyManager {
                 val encoded = doc.getString(FIELD_KEY)
                 if (encoded != null) {
                     val kek = sessionKek
+                    Log.d(TAG, "fetchKeyFromFirestore: got encoded key (len=${encoded.length}), kek=${if (kek != null) "present" else "null"} for deviceId=$deviceId")
                     if (kek != null) {
                         try {
                             onResult(CryptoManager.unwrapChaChaKeyFromCloud(encoded, kek))
@@ -207,12 +236,14 @@ object KeyManager {
                             onResult(CryptoManager.keyFromBytes(bytes))
                             return@addOnSuccessListener
                         }
+                        Log.e(TAG, "fetchKeyFromFirestore: decoded ${bytes.size} bytes, expected 32 — cannot use as raw key")
                     } catch (e: Exception) {
                         Log.e(TAG, "Raw key fallback also failed", e)
                     }
                     Log.e(TAG, "Cannot decode key for deviceId=$deviceId")
                     onResult(null)
                 } else {
+                    Log.e(TAG, "fetchKeyFromFirestore: encryption_key field is null/missing in Firestore doc for deviceId=$deviceId (doc.exists=${doc.exists()})")
                     onResult(null)
                 }
             }
@@ -220,6 +251,22 @@ object KeyManager {
                 Log.e(TAG, "Failed to fetch key from Firestore", e)
                 onResult(null)
             }
+    }
+
+    /** Deletes stale log buckets whose encryption key has been lost. */
+    private fun deleteStaleLogs(deviceId: String, onDone: () -> Unit) {
+        val logsRef = FirebaseFirestore.getInstance()
+            .collection(COLLECTION_SESSIONS).document(deviceId).collection("logs")
+        logsRef.get()
+            .addOnSuccessListener { snapshot ->
+                if (snapshot.isEmpty) { onDone(); return@addOnSuccessListener }
+                val batch = FirebaseFirestore.getInstance().batch()
+                snapshot.documents.forEach { batch.delete(it.reference) }
+                batch.commit()
+                    .addOnSuccessListener { Log.d(TAG, "Purged stale logs for deviceId=$deviceId"); onDone() }
+                    .addOnFailureListener { e -> Log.e(TAG, "Failed to purge stale logs", e); onDone() }
+            }
+            .addOnFailureListener { e -> Log.e(TAG, "Failed to list stale logs", e); onDone() }
     }
 
     /** Clears all in-memory cached keys (call on logout). */
