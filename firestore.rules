@@ -10,6 +10,10 @@ service cloud.firestore {
         allow read, create, update: if request.auth != null && request.auth.uid == uid;
         allow delete: if request.auth != null && request.auth.uid == uid;
       }
+
+      match /pending_pairings/{code} {
+        allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+      }
     }
 
     match /login_attempts/{ip} {
