@@ -71,7 +71,7 @@ fun ChildPairingFlow(onPaired: () -> Unit, onBackToLogin: () -> Unit) {
         // Best-effort wipe of the old child: ignore delete failures (ghost data is a nuisance, not a safety issue) and proceed to activate.
         if (intent == PairingRepository.Intent.REPLACE && target != null) {
             FirebaseIncidentManager.deleteOldChildData(target.fid) { _ ->
-                DeviceRepository.deleteDeviceDoc(u, target.fid) { _ -> activate() }
+                DeviceRepository.removeChildCompletely(u, target.fid) { _ -> activate() }
             }
         } else {
             activate()
@@ -127,6 +127,7 @@ fun ChildPairingFlow(onPaired: () -> Unit, onBackToLogin: () -> Unit) {
             uid = uid!!,
             code = s.code,
             onApproved = { pairing ->
+                PairingRepository.deletePending(uid!!, s.code)
                 val target = children.firstOrNull { it.fid == pairing.targetFid }
                 finalize(pairing.intent, target)
             },
@@ -240,10 +241,14 @@ private fun WaitingScreen(
     onExpiredOrCancel: () -> Unit
 ) {
     var remaining by remember(code) { mutableStateOf(PairingLogic.EXPIRY_MS) }
+    var handled by remember(code) { mutableStateOf(false) }
 
     DisposableEffect(code) {
         val reg: ListenerRegistration = PairingRepository.listenPending(uid, code) { pairing ->
-            if (pairing != null && pairing.status == "APPROVED") onApproved(pairing)
+            if (!handled && pairing != null && pairing.status == "APPROVED") {
+                handled = true
+                onApproved(pairing)
+            }
         }
         onDispose { reg.remove() }
     }
@@ -253,7 +258,10 @@ private fun WaitingScreen(
             delay(1000)
             remaining -= 1000
         }
-        onExpiredOrCancel()
+        if (!handled) {
+            handled = true
+            onExpiredOrCancel()
+        }
     }
 
     val mins = (remaining / 1000) / 60
@@ -269,7 +277,7 @@ private fun WaitingScreen(
                 color = AppTheme.ChildAccent, modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp))
         }
         Text("Expires in %d:%02d".format(mins, secs), color = AppTheme.ChildTextSecondary, fontSize = 14.sp)
-        TextButton(onClick = onExpiredOrCancel) { Text("Cancel", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold) }
+        TextButton(onClick = { if (!handled) { handled = true; onExpiredOrCancel() } }) { Text("Cancel", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold) }
     }
 }
 

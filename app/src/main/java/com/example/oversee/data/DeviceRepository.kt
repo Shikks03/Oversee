@@ -185,4 +185,34 @@ object DeviceRepository {
                 onComplete(false)
             }
     }
+
+    /**
+     * Fully removes a child device: deletes its device doc and, if it is the legacy
+     * child (matches the frozen child_device_fid pointer), clears the legacy pointer
+     * fields so fetchChildDevices does not resurrect it. Best-effort on each step.
+     */
+    fun removeChildCompletely(uid: String, fid: String, onComplete: (Boolean) -> Unit) {
+        FirebaseUserManager.fetchProfile(uid) { profile ->
+            val legacyFid = profile?.get("child_device_fid") as? String
+            val clearLegacy = {
+                if (fid == legacyFid) {
+                    db.collection("users").document(uid)
+                        .update(
+                            mapOf(
+                                "child_device_fid" to FieldValue.delete(),
+                                "child_display_uid" to FieldValue.delete()
+                            )
+                        )
+                        .addOnSuccessListener { deleteDeviceDoc(uid, fid, onComplete) }
+                        .addOnFailureListener { e ->
+                            Log.e(TAG, "removeChildCompletely: failed to clear legacy pointer uid=$uid", e)
+                            deleteDeviceDoc(uid, fid, onComplete)
+                        }
+                } else {
+                    deleteDeviceDoc(uid, fid, onComplete)
+                }
+            }
+            clearLegacy()
+        }
+    }
 }
