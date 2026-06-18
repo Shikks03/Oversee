@@ -236,22 +236,12 @@ fun AppRouter() {
             RoleSelectionScreen(
                 user = userName,
                 onSelectChild = {
-                    val uid = AuthRepository.getUserId() ?: return@RoleSelectionScreen
+                    AuthRepository.getUserId() ?: return@RoleSelectionScreen
                     if (!NetworkUtils.isAvailable(context)) {
                         Toast.makeText(context, "No internet connection", Toast.LENGTH_SHORT).show()
                         return@RoleSelectionScreen
                     }
-                    DeviceRepository.getFid { newFid ->
-                        if (newFid != null) {
-                            val cancelTimeout = NetworkUtils.startTimeout(15_000L) {
-                                Toast.makeText(context, "Request timed out. Please try again.", Toast.LENGTH_SHORT).show()
-                            }
-                            DeviceRepository.setRoleForThisDevice(context, uid, newFid, "CHILD") { success ->
-                                cancelTimeout()
-                                if (success) navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
-                            }
-                        }
-                    }
+                    navController.navigate("child_pairing")
                 },
                 onSelectParent = {
                     val uid = AuthRepository.getUserId() ?: return@RoleSelectionScreen
@@ -273,6 +263,19 @@ fun AppRouter() {
                 }
             )
 
+        }
+
+        // 4b. CHILD PAIRING FLOW
+        composable("child_pairing") {
+            com.example.oversee.ui.child.ChildPairingFlow(
+                onPaired = {
+                    navController.navigate("child_dashboard") { popUpTo("role_selection") { inclusive = true } }
+                },
+                onBackToLogin = {
+                    AuthRepository.logout(context)
+                    navController.navigate("auth") { popUpTo(0) }
+                }
+            )
         }
 
         // 5. PARENT DASHBOARD ROUTE (Real Firebase Logic Added)
