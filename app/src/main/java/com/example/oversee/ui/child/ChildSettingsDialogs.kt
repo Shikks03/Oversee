@@ -31,7 +31,7 @@ import com.example.oversee.utils.readAssetFile
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChildSettingsDialog(
-    deviceId: String, accountId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
+    deviceId: String, childName: String, accountId: String, parentId: String, parentName: String, lastSyncedTime: String, consoleLogs: List<String>,
     monitoringEnabled: Boolean,
     onDismiss: () -> Unit, onChangePin: () -> Unit,
     onKillSwitch: (Boolean) -> Unit,
@@ -61,6 +61,13 @@ fun ChildSettingsDialog(
                 item {
                     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
                         Column {
+                            SettingsRow(
+                                icon = Icons.Rounded.DriveFileRenameOutline,
+                                title = "Device Name",
+                                subtitle = childName.ifBlank { "Not set by parent yet" },
+                                onClick = null
+                            )
+                            HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.Rounded.Smartphone, title = "This Device ID", subtitle = deviceId, onClick = null)
                             HorizontalDivider(color = AppTheme.ChildBackground)
                             SettingsRow(icon = Icons.Rounded.Tag, title = "Account ID", subtitle = accountId, onClick = null)

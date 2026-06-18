@@ -61,6 +61,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
 
     var parentName by remember { mutableStateOf(UserRepository.getLocalName(context).ifBlank { "Unknown Parent" }) }
     var parentId by remember { mutableStateOf(AuthRepository.getUserId() ?: "---") }
+    var childName by remember { mutableStateOf("") }
     var lastSyncedTime by remember { mutableStateOf(AppPreferenceManager.getString(context, "last_synced", "Never")) }
 
     var isReady by remember { mutableStateOf(false) }
@@ -122,6 +123,9 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                 if (displayUid == "------") displayUid = DeviceRepository.toDisplayCode(id)
                 DeviceRepository.getDisplayUidForChild(uid, id) { uid6 ->
                     if (uid6.isNotBlank()) displayUid = uid6
+                }
+                DeviceRepository.fetchDeviceDoc(uid, id) { doc ->
+                    childName = (doc?.get("child_name") as? String).orEmpty()
                 }
                 com.example.oversee.data.local.KeyManager.getOrCreateKey(context, id) {
                     addToConsole("Encryption Key Ready.")
@@ -218,9 +222,20 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
             HowToUseDialog(onDismiss = { showInfoDialog = false })
         }
 
+        LaunchedEffect(showSettingsDialog) {
+            if (showSettingsDialog) {
+                val uid = AuthRepository.getUserId()
+                if (uid != null && deviceId.isNotBlank() && deviceId != "Loading...") {
+                    DeviceRepository.fetchDeviceDoc(uid, deviceId) { doc ->
+                        childName = (doc?.get("child_name") as? String).orEmpty()
+                    }
+                }
+            }
+        }
+
         if (showSettingsDialog) {
             ChildSettingsDialog(
-                deviceId = deviceId, accountId = displayUid, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
+                deviceId = deviceId, childName = childName, accountId = displayUid, parentId = parentId, parentName = parentName, lastSyncedTime = lastSyncedTime,
                 consoleLogs = consoleLogs,
                 monitoringEnabled = monitoringEnabled,
                 onDismiss = { showSettingsDialog = false },
