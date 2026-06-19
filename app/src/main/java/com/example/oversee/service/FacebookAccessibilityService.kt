@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityWindowInfo
+import com.example.oversee.data.PunishmentRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.utils.sendConsoleUpdate
 
@@ -44,8 +45,11 @@ class FacebookAccessibilityService : AccessibilityService() {
             }
 
             val unlockTime = AppPreferenceManager.getLong(this, "app_unlock_time", 0L)
+            val punishmentStatus = AppPreferenceManager.getString(this, "punishment_status", PunishmentRepository.STATUS_NONE)
+            val punishmentActive = punishmentStatus == PunishmentRepository.STATUS_ACTIVE ||
+                punishmentStatus == PunishmentRepository.STATUS_PENDING_APPROVAL
 
-            if (System.currentTimeMillis() < unlockTime) {
+            if (System.currentTimeMillis() < unlockTime || punishmentActive) {
                 try {
                     val intent = Intent(this, OverlayService::class.java).apply {
                         putExtra(OverlayService.EXTRA_OVERLAY_MODE, OverlayService.MODE_SEVERE_WARNING)
@@ -65,8 +69,17 @@ class FacebookAccessibilityService : AccessibilityService() {
             lastEventTime = System.currentTimeMillis()
 
         } else if (System.currentTimeMillis() - lastEventTime > 2000) {
+            // The penalty overlay grabs focus, so we briefly see non-monitored window events.
+            // Never tear the overlay down while a timeout or punishment is still in effect —
+            // doing so makes it flicker and resets the chore checklist.
+            val unlockTime = AppPreferenceManager.getLong(this, "app_unlock_time", 0L)
+            val status = AppPreferenceManager.getString(this, "punishment_status", PunishmentRepository.STATUS_NONE)
+            val penaltyActive = System.currentTimeMillis() < unlockTime ||
+                status == PunishmentRepository.STATUS_ACTIVE ||
+                status == PunishmentRepository.STATUS_PENDING_APPROVAL
+
             // Only close if we haven't seen a monitored app event in 2 seconds
-            if (ScreenCaptureService.ScreenState.isAppOpen) {
+            if (ScreenCaptureService.ScreenState.isAppOpen && !penaltyActive) {
                 ScreenCaptureService.ScreenState.isAppOpen = false
                 sendConsoleUpdate("App Event: Monitored App Closed")
 

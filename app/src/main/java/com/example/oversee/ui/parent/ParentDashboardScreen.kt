@@ -111,10 +111,12 @@ fun ParentDashboardScreen(
                     onSyncHistoryClick = { currentTab = 6 },
                     onHelpSupportClick = { currentTab = 14 },
                     onAddChildClick = { showAddChildDialog = true },
+                    onPunishmentClick = { currentTab = 7 },
                     onPrivacyPolicyClick = { currentTab = 15 }
                 )
                 // Settings Sub-Routes
                 6 -> SyncHistoryScreen(onBackClick = { currentTab = 3 }, onManualSyncClick = onRefreshAndExtendRange)
+                7 -> PunishmentScreen(selectedChild = selectedChild, onBackClick = { currentTab = 3 })
 //                8 -> ChangePasswordScreen(onBackClick = { currentTab = 3 })
 //                10 -> DeleteAccountScreen(onBackClick = { currentTab = 3 })
 //                11 -> PinLockScreen(onBackClick = { currentTab = 3 })

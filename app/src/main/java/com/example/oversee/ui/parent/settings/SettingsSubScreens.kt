@@ -26,7 +26,10 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.oversee.data.DeviceRepository
+import com.example.oversee.data.PunishmentRepository
 import com.example.oversee.data.local.AppPreferenceManager
+import com.example.oversee.ui.components.dialogs.OverSeeDialog
 import com.example.oversee.ui.components.inputs.OverSeeTextField // NEW IMPORT
 import com.example.oversee.ui.theme.AppTheme
 import com.example.oversee.utils.readAssetFile
@@ -267,3 +270,252 @@ fun HelpCard(question: String, answer: String) {
         }
     }
 }
+
+// --- 9. Punishment & Timeout (per child) ---
+@Composable
+fun PunishmentScreen(selectedChild: DeviceRepository.ChildDevice?, onBackClick: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize().background(AppTheme.Background)) {
+        SettingsTopBar("Punishment & Timeout", onBackClick)
+
+        val fid = selectedChild?.fid
+        if (selectedChild == null || fid == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+                Text(
+                    "Select a child from the dashboard first to configure their punishment and timeout.",
+                    fontSize = 14.sp, color = Color.Gray,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        } else {
+            PunishmentEditor(selectedChild, fid)
+        }
+    }
+}
+
+@Composable
+private fun PunishmentEditor(selectedChild: DeviceRepository.ChildDevice, fid: String) {
+    val context = LocalContext.current
+
+    // --- State ---
+    var loaded by remember(fid) { mutableStateOf(false) }
+    var timeoutEnabled by remember(fid) { mutableStateOf(false) }
+    var blockDuration by remember(fid) { mutableLongStateOf(5L) }
+    var burstThreshold by remember(fid) { mutableLongStateOf(55L) }
+    var punishmentEnabled by remember(fid) { mutableStateOf(false) }
+    val chores = remember(fid) { mutableStateListOf<String>() }
+    var pendingApproval by remember(fid) { mutableStateOf(false) }
+    var showAddChore by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+
+    // Load config once.
+    LaunchedEffect(fid) {
+        PunishmentRepository.fetchConfig(fid) { cfg ->
+            timeoutEnabled = cfg.timeoutEnabled
+            blockDuration = cfg.blockDurationMins
+            burstThreshold = cfg.burstThreshold
+            punishmentEnabled = cfg.punishmentEnabled
+            chores.clear()
+            chores.addAll(cfg.chores)
+            loaded = true
+        }
+    }
+
+    // Watch the child's punishment status for the approval banner.
+    DisposableEffect(fid) {
+        val reg = PunishmentRepository.listen(fid) { snap ->
+            pendingApproval =
+                snap.getString(PunishmentRepository.FIELD_PUNISHMENT_STATUS) ==
+                PunishmentRepository.STATUS_PENDING_APPROVAL
+        }
+        onDispose { reg.remove() }
+    }
+
+    if (!loaded) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = AppTheme.Primary)
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = AppTheme.PaddingDefault),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+            // Child name header
+            Text(selectedChild.name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
+            Text("Rules apply only to this device.", fontSize = 13.sp, color = Color.Gray)
+
+            // Approval banner
+            if (pendingApproval) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                    border = BorderStroke(1.dp, AppTheme.Warning)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = AppTheme.Warning)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Chores completed", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "${selectedChild.name} marked all chores done and is waiting to be unlocked.",
+                            fontSize = 13.sp, color = Color.DarkGray, lineHeight = 18.sp
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { PunishmentRepository.approveUnlock(fid) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Success),
+                            shape = RoundedCornerShape(12.dp)
+                        ) { Text("Approve Unlock", fontWeight = FontWeight.Bold) }
+                    }
+                }
+            }
+
+            // --- TIMEOUT CARD ---
+            Text("Timeout", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AppTheme.Primary, modifier = Modifier.padding(start = 4.dp))
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = AppTheme.Surface), border = BorderStroke(1.dp, AppTheme.Border)) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Penalty Timeout", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
+                            Text("Block the app when a High-Risk word is detected.", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Switch(checked = timeoutEnabled, onCheckedChange = { timeoutEnabled = it })
+                    }
+                    HorizontalDivider(color = AppTheme.Background)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text("Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
+                            Text("${blockDuration}m", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = if (timeoutEnabled) AppTheme.Primary else Color.LightGray)
+                        }
+                        Slider(
+                            value = blockDuration.toFloat(),
+                            onValueChange = { blockDuration = it.toLong() },
+                            valueRange = 1f..30f, steps = 28, enabled = timeoutEnabled
+                        )
+                    }
+                    HorizontalDivider(color = AppTheme.Background)
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("High-Risk Burst Threshold", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
+                                Text("Trigger a penalty after this many flags in 5 minutes.", fontSize = 12.sp, color = Color.Gray)
+                            }
+                            Text("$burstThreshold", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = if (timeoutEnabled) AppTheme.Primary else Color.LightGray)
+                        }
+                        Slider(
+                            value = burstThreshold.toFloat(),
+                            onValueChange = { burstThreshold = it.toLong() },
+                            valueRange = 10f..100f, steps = 17, enabled = timeoutEnabled
+                        )
+                    }
+                }
+            }
+
+            // --- PUNISHMENT CARD ---
+            Text("Punishment", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AppTheme.Primary, modifier = Modifier.padding(start = 4.dp))
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = AppTheme.Surface), border = BorderStroke(1.dp, AppTheme.Border)) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Require Chores", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
+                            Text("Child must complete these before being unlocked.", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        Switch(checked = punishmentEnabled, onCheckedChange = { punishmentEnabled = it })
+                    }
+                    HorizontalDivider(color = AppTheme.Background)
+
+                    chores.forEachIndexed { index, chore ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CheckCircleOutline, contentDescription = null, tint = if (punishmentEnabled) AppTheme.Primary else Color.LightGray, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(chore, fontSize = 15.sp, color = if (punishmentEnabled) Color.Black else Color.Gray, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { chores.removeAt(index) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove chore", tint = AppTheme.Error)
+                            }
+                        }
+                        HorizontalDivider(color = AppTheme.Background, modifier = Modifier.padding(horizontal = 16.dp))
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { showAddChore = true }.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = AppTheme.Primary)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Add chore", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AppTheme.Primary)
+                    }
+                }
+            }
+
+            Button(
+                onClick = {
+                    saving = true
+                    PunishmentRepository.saveConfig(
+                        fid,
+                        PunishmentRepository.Config(
+                            timeoutEnabled = timeoutEnabled,
+                            blockDurationMins = blockDuration,
+                            burstThreshold = burstThreshold,
+                            punishmentEnabled = punishmentEnabled,
+                            chores = chores.toList()
+                        )
+                    ) { ok ->
+                        saving = false
+                        android.widget.Toast.makeText(
+                            context,
+                            if (ok) "Saved" else "Save failed — check connection",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                enabled = !saving,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AppTheme.Primary)
+            ) {
+                if (saving) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.White)
+                else Text("Save", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+
+            Spacer(Modifier.height(24.dp))
+        }
+
+        if (showAddChore) {
+            var newChore by remember { mutableStateOf("") }
+            OverSeeDialog(
+                title = "Add Chore",
+                description = "This task will be added to the child's punishment checklist.",
+                confirmText = "Add",
+                onConfirm = {
+                    val trimmed = newChore.trim()
+                    if (trimmed.isNotEmpty()) chores.add(trimmed)
+                    showAddChore = false
+                },
+                onDismiss = { showAddChore = false }
+            ) {
+                OverSeeTextField(
+                    value = newChore,
+                    onValueChange = { newChore = it },
+                    label = "Chore description",
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }

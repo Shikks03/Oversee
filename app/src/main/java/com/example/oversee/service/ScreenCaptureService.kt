@@ -40,6 +40,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.example.oversee.R
 import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.IncidentRepository
+import com.example.oversee.data.PunishmentRepository
 import com.example.oversee.data.local.AppPreferenceManager
 import com.example.oversee.data.model.Incident
 import com.example.oversee.domain.TextAnalysisEngine
@@ -89,6 +90,8 @@ class ScreenCaptureService : Service() {
 
     private var syncRequestListener: ListenerRegistration? = null
     @Volatile private var lastHandledSyncRequest = 0L
+    @Volatile private var lastHandledConfigUpdate = 0L
+    @Volatile private var thisFid: String? = null
 
 
     private var topInset = 0
@@ -202,6 +205,7 @@ class ScreenCaptureService : Service() {
         val timeoutEnabled = try { AppPreferenceManager.getBoolean(applicationContext, "timeout_enabled", false) } catch (e: Exception) { false }
         val blockMins = try { AppPreferenceManager.getLong(applicationContext, "block_duration_mins", 5L) } catch (e: Exception) { 5L }
         val burstThreshold = try { AppPreferenceManager.getLong(applicationContext, "burst_threshold", 55L) } catch (e: Exception) { 55L }
+        val punishmentEnabled = try { AppPreferenceManager.getBoolean(applicationContext, "punishment_enabled", false) } catch (e: Exception) { false }
 
         val cropped = if (topInset + bottomInset > 0) {
             val cropHeight = bitmap.height - topInset - bottomInset
@@ -263,9 +267,14 @@ class ScreenCaptureService : Service() {
                                 )
 
                                 // --- PENALTY OVERLAY LOGIC ---
-                                if (severity == "HIGH" && timeoutEnabled) {
-                                    val unlockTime = System.currentTimeMillis() + (blockMins * 60 * 1000L)
-                                    try { AppPreferenceManager.saveLong(applicationContext, "app_unlock_time", unlockTime) } catch (e: Exception) {}
+                                if (severity == "HIGH" && (timeoutEnabled || punishmentEnabled)) {
+                                    if (timeoutEnabled) {
+                                        val unlockTime = System.currentTimeMillis() + (blockMins * 60 * 1000L)
+                                        try { AppPreferenceManager.saveLong(applicationContext, "app_unlock_time", unlockTime) } catch (e: Exception) {}
+                                    }
+                                    if (punishmentEnabled) {
+                                        thisFid?.let { PunishmentRepository.setActive(it) }
+                                    }
 
                                     val overlayIntent = Intent(applicationContext, OverlayService::class.java).apply {
                                         putExtra(OverlayService.EXTRA_OVERLAY_MODE, OverlayService.MODE_SEVERE_WARNING)
@@ -367,10 +376,16 @@ class ScreenCaptureService : Service() {
     private fun listenForParentSyncRequests() {
         DeviceRepository.getFid { fid ->
             if (fid == null) return@getFid
+            thisFid = fid
             syncRequestListener = FirebaseFirestore.getInstance()
                 .collection("monitor_sessions").document(fid)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
+
+                    // Cache parent-controlled discipline config locally so OCR enforcement
+                    // (which reads prefs) stays the single source of truth.
+                    cacheDisciplineConfig(snapshot)
+
                     val requestedAt = snapshot.getLong("sync_requested_at") ?: return@addSnapshotListener
                     if (requestedAt > lastHandledSyncRequest) {
                         lastHandledSyncRequest = requestedAt
@@ -379,6 +394,30 @@ class ScreenCaptureService : Service() {
                         IncidentRepository.syncData(applicationContext)
                     }
                 }
+        }
+    }
+
+    /** Mirrors parent-set timeout + punishment config into local prefs whenever it changes. */
+    private fun cacheDisciplineConfig(snapshot: com.google.firebase.firestore.DocumentSnapshot) {
+        try {
+            val updatedAt = snapshot.getLong(PunishmentRepository.FIELD_CONFIG_UPDATED_AT) ?: 0L
+            if (updatedAt > lastHandledConfigUpdate) {
+                lastHandledConfigUpdate = updatedAt
+                AppPreferenceManager.saveBoolean(applicationContext, "timeout_enabled", snapshot.getBoolean(PunishmentRepository.FIELD_TIMEOUT_ENABLED) ?: false)
+                AppPreferenceManager.saveLong(applicationContext, "block_duration_mins", snapshot.getLong(PunishmentRepository.FIELD_BLOCK_DURATION) ?: 5L)
+                AppPreferenceManager.saveLong(applicationContext, "burst_threshold", snapshot.getLong(PunishmentRepository.FIELD_BURST_THRESHOLD) ?: 55L)
+                AppPreferenceManager.saveBoolean(applicationContext, "punishment_enabled", snapshot.getBoolean(PunishmentRepository.FIELD_PUNISHMENT_ENABLED) ?: false)
+                @Suppress("UNCHECKED_CAST")
+                val chores = (snapshot.get(PunishmentRepository.FIELD_PUNISHMENT_CHORES) as? List<String>) ?: emptyList()
+                AppPreferenceManager.saveString(applicationContext, "punishment_chores", org.json.JSONArray(chores).toString())
+                sendConsoleUpdate("System: Parent updated discipline rules")
+            }
+            // Status changes (e.g. parent approval) update every snapshot, not gated by config version.
+            snapshot.getString(PunishmentRepository.FIELD_PUNISHMENT_STATUS)?.let {
+                AppPreferenceManager.saveString(applicationContext, "punishment_status", it)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "cacheDisciplineConfig failed: ${e.message}")
         }
     }
 

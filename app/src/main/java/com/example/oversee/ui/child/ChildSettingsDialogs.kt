@@ -89,7 +89,7 @@ fun ChildSettingsDialog(
                             SettingsRow(
                                 icon = Icons.Rounded.Timer,
                                 title = "Penalty & Thresholds",
-                                subtitle = "Configure timeouts and alert limits",
+                                subtitle = "Set by your parent · view only",
                                 onClick = { showMonitoringRules = true }
                             )
                         }
@@ -268,15 +268,21 @@ fun SettingsRow(
 }
 
 // =========================================================================
-// NEW: DEDICATED MONITORING RULES SCREEN
+// MONITORING RULES — READ-ONLY (parent-controlled)
 // =========================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonitoringRulesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    var timeoutEnabled by remember { mutableStateOf(AppPreferenceManager.getBoolean(context, "timeout_enabled", false)) }
-    var blockDuration by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "block_duration_mins", 5L)) }
-    var burstThreshold by remember { mutableLongStateOf(AppPreferenceManager.getLong(context, "burst_threshold", 55L)) }
+    val timeoutEnabled = AppPreferenceManager.getBoolean(context, "timeout_enabled", false)
+    val blockDuration = AppPreferenceManager.getLong(context, "block_duration_mins", 5L)
+    val burstThreshold = AppPreferenceManager.getLong(context, "burst_threshold", 55L)
+    val punishmentEnabled = AppPreferenceManager.getBoolean(context, "punishment_enabled", false)
+    val choreCount = remember {
+        try {
+            org.json.JSONArray(AppPreferenceManager.getString(context, "punishment_chores", "[]")).length()
+        } catch (e: Exception) { 0 }
+    }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Scaffold(
@@ -289,78 +295,50 @@ fun MonitoringRulesDialog(onDismiss: () -> Unit) {
             },
             containerColor = AppTheme.ChildBackground
         ) { padding ->
-            Column(modifier = Modifier.padding(padding).fillMaxSize().padding(24.dp)) {
+            Column(modifier = Modifier.padding(padding).fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
 
-                // --- SECTION 0: TIMEOUT TOGGLE ---
-                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Penalty Timeout", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.Black)
-                            Text("Block the app when a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
-                        }
-                        Switch(
-                            checked = timeoutEnabled,
-                            onCheckedChange = {
-                                timeoutEnabled = it
-                                AppPreferenceManager.saveBoolean(context, "timeout_enabled", it)
-                            }
-                        )
+                // Parent-controlled note
+                Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = AppTheme.ChildAccentLight)) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Lock, contentDescription = null, tint = AppTheme.ChildAccent, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text("These rules are set by your parent and can't be changed here.", fontSize = 13.sp, color = AppTheme.ChildAccent, lineHeight = 18.sp)
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-
-                // --- SECTION 1: TIMEOUT DURATION ---
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Penalty Timeout Duration", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
-                                Text("Time blocked after a High-Risk word is detected.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
-                            }
-                            Text("${blockDuration}m", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (timeoutEnabled) AppTheme.ChildAccent else Color.LightGray)
-                        }
-
-                        Slider(
-                            value = blockDuration.toFloat(),
-                            onValueChange = { blockDuration = it.toLong() },
-                            onValueChangeFinished = { AppPreferenceManager.saveLong(context, "block_duration_mins", blockDuration) },
-                            valueRange = 1f..30f,
-                            steps = 28,
-                            enabled = timeoutEnabled
-                        )
+                    Column {
+                        ReadOnlyRuleRow("Penalty Timeout", if (timeoutEnabled) "On" else "Off")
+                        HorizontalDivider(color = AppTheme.ChildBackground)
+                        ReadOnlyRuleRow("Timeout Duration", if (timeoutEnabled) "${blockDuration}m" else "—")
+                        HorizontalDivider(color = AppTheme.ChildBackground)
+                        ReadOnlyRuleRow("High-Risk Burst Threshold", if (timeoutEnabled) "$burstThreshold flags / 5 min" else "—")
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-
-                // --- SECTION 2: BURST THRESHOLD ---
                 Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                    Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("High-Risk Burst Threshold", fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = if (timeoutEnabled) Color.Black else Color.LightGray)
-                                Text("Trigger a penalty if this many flags happen within 5 minutes.", fontSize = 12.sp, color = AppTheme.ChildTextSecondary)
-                            }
-                            Text("$burstThreshold", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = if (timeoutEnabled) AppTheme.ChildAccent else Color.LightGray)
+                    Column {
+                        ReadOnlyRuleRow("Required Chores", if (punishmentEnabled) "On" else "Off")
+                        if (punishmentEnabled) {
+                            HorizontalDivider(color = AppTheme.ChildBackground)
+                            ReadOnlyRuleRow("Chores to complete", if (choreCount == 1) "1 task" else "$choreCount tasks")
                         }
-
-                        Slider(
-                            value = burstThreshold.toFloat(),
-                            onValueChange = { burstThreshold = it.toLong() },
-                            onValueChangeFinished = { AppPreferenceManager.saveLong(context, "burst_threshold", burstThreshold) },
-                            valueRange = 10f..100f,
-                            steps = 17,
-                            enabled = timeoutEnabled
-                        )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ReadOnlyRuleRow(title: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = Color.Black, modifier = Modifier.weight(1f))
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AppTheme.ChildAccent)
     }
 }
 
