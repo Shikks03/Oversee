@@ -191,22 +191,43 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
         )
     } else if (!isUnlocked) {
         var errorTxt by remember { mutableStateOf<String?>(null) }
-        OverSeePinPad(
-            title = "Enter PIN",
-            subtitle = "This device is monitored. Enter PIN to access the Child Device Dashboard.",
-            errorText = errorTxt,
-            onPinComplete = { entered ->
-                if (entered == savedChildPin) {
-                    errorTxt = null
-                    isUnlocked = true
-                } else {
-                    errorTxt = "Incorrect PIN. Try again."
+        var showRecovery by remember { mutableStateOf(false) }
+
+        if (showRecovery) {
+            SecurityQuestionRecoveryScreen(
+                onSuccess = {
+                    // Wipe the forgotten PIN to force the app back to PIN Setup
+                    AppPreferenceManager.saveString(context, "child_pin", "")
+                    savedChildPin = ""
+                    showRecovery = false
+                },
+                onCancel = { showRecovery = false }
+            )
+        } else {
+            OverSeePinPad(
+                title = "Enter PIN",
+                subtitle = "This device is monitored. Enter PIN to access the Child Device Dashboard.",
+                errorText = errorTxt,
+                onPinComplete = { entered ->
+                    if (entered == savedChildPin) {
+                        errorTxt = null
+                        isUnlocked = true
+                    } else {
+                        errorTxt = "Incorrect PIN. Try again."
+                    }
+                },
+                bottomContent = {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        TextButton(onClick = { showRecovery = true }) {
+                            Text("Forgot PIN?", color = AppTheme.ChildAccent, fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(onClick = onExitApp) {
+                            Text("Exit to Home Screen", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
-            },
-            bottomContent = {
-                TextButton(onClick = onExitApp) { Text("Exit to Home Screen", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold) }
-            }
-        )
+            )
+        }
     } else {
         ChildDashboardScreen(
             deviceId = deviceId, parentName = parentName, checks = healthStates,

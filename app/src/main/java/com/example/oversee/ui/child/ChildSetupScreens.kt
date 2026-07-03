@@ -20,6 +20,27 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.oversee.ui.components.inputs.OverSeePinPad
 import com.example.oversee.ui.theme.AppTheme
+import androidx.compose.ui.platform.LocalContext
+import com.example.oversee.data.local.AppPreferenceManager
+import java.security.MessageDigest
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.example.oversee.ui.components.inputs.OverSeeTextField
+
+// --- ADDED: Child-proof obscure security questions ---
+val SECURITY_QUESTIONS = listOf(
+    "What was the exact make and model of your first car?",
+    "Who was your favorite band or artist in the 8th grade?",
+    "What was the name of the company where you had your very first paying job?",
+    "What was the name of the bank that issued your first credit card?",
+    "What was the name of the street you lived on when you were 10 years old?"
+)
+
+// --- ADDED: Secure Hashing ---
+fun hashSecurityAnswer(answer: String): String {
+    val bytes = MessageDigest.getInstance("SHA-256").digest(answer.trim().lowercase().toByteArray())
+    return bytes.joinToString("") { "%02x".format(it) }
+}
 
 // =========================================================================
 // 1. CHILD LINK SETUP SCREEN
@@ -78,14 +99,14 @@ fun ChildLinkSetupScreen(deviceId: String, onLinkConfirmed: () -> Unit, onLogout
 }
 
 // =========================================================================
-// 2. SMART PIN SETUP FLOW
+// 2. SMART PIN SETUP FLOW (Updated Layout)
 // =========================================================================
 @Composable
 fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) {
     var stage by remember { mutableStateOf(if (parentPin.isNotBlank()) "ASK_PARENT" else "CREATE_NEW") }
     var tempPin by remember { mutableStateOf("") }
     var errorTxt by remember { mutableStateOf<String?>(null) }
-    var syncParentPin by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     when (stage) {
         "ASK_PARENT" -> {
@@ -110,12 +131,8 @@ fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) 
                     stage = "CONFIRM_NEW"
                 },
                 bottomContent = {
-                    if (parentPin.isBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { syncParentPin = !syncParentPin }) {
-                            Checkbox(checked = syncParentPin, onCheckedChange = { syncParentPin = it }, colors = CheckboxDefaults.colors(checkedColor = AppTheme.ChildAccent))
-                            Text("Use this PIN for Parent Dashboard too", fontSize = 14.sp, color = Color.DarkGray)
-                        }
-                    }
+                    // This invisible spacer replaces the deleted checkbox so the keypad doesn't shift down!
+                    Spacer(modifier = Modifier.height(48.dp))
                 }
             )
         }
@@ -125,8 +142,10 @@ fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) 
                 subtitle = "Re-enter your 4-digit PIN to confirm.",
                 errorText = errorTxt,
                 onPinComplete = { entered ->
-                    if (entered == tempPin) onPinSaved(entered, syncParentPin)
-                    else {
+                    if (entered == tempPin) {
+                        errorTxt = null
+                        stage = "SETUP_SECURITY"
+                    } else {
                         errorTxt = "PINs do not match. Try again."
                         stage = "CREATE_NEW"
                     }
@@ -135,6 +154,132 @@ fun SmartPinSetupFlow(parentPin: String, onPinSaved: (String, Boolean) -> Unit) 
                     TextButton(onClick = { stage = "CREATE_NEW"; errorTxt = null }) { Text("Start Over", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold) }
                 }
             )
+        }
+        "SETUP_SECURITY" -> {
+            SecurityQuestionsSetupScreen(
+                onComplete = { q1, a1, q2, a2 ->
+                    AppPreferenceManager.saveString(context, "sec_q1", q1)
+                    AppPreferenceManager.saveString(context, "sec_a1_hash", hashSecurityAnswer(a1))
+                    AppPreferenceManager.saveString(context, "sec_q2", q2)
+                    AppPreferenceManager.saveString(context, "sec_a2_hash", hashSecurityAnswer(a2))
+
+                    onPinSaved(tempPin, false)
+                },
+                onCancel = { stage = "CREATE_NEW" }
+            )
+        }
+    }
+}
+
+// =========================================================================
+// 2B. SECURITY QUESTIONS SETUP
+// =========================================================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SecurityQuestionsSetupScreen(
+    onComplete: (String, String, String, String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var q1 by remember { mutableStateOf(SECURITY_QUESTIONS[0]) }
+    var a1 by remember { mutableStateOf("") }
+
+    var q2 by remember { mutableStateOf(SECURITY_QUESTIONS[1]) }
+    var a2 by remember { mutableStateOf("") }
+
+    var showError by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.ChildBackground)
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(32.dp))
+        Icon(Icons.Rounded.Visibility, contentDescription = null, modifier = Modifier.size(56.dp), tint = AppTheme.ChildAccent)
+        Spacer(Modifier.height(16.dp))
+        Text("PIN Recovery Setup", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
+        Text(
+            "Select two questions your child is unlikely to know. These will be used if you ever forget your PIN.",
+            fontSize = 14.sp, textAlign = TextAlign.Center, color = AppTheme.ChildTextSecondary, lineHeight = 20.sp,
+            modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
+        )
+
+        // Question 1
+        QuestionDropdown(selected = q1, options = SECURITY_QUESTIONS, onSelect = { q1 = it }, label = "Question 1")
+        Spacer(Modifier.height(8.dp))
+        OverSeeTextField(value = a1, onValueChange = { a1 = it }, label = "Answer", modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(24.dp))
+
+        // Question 2
+        QuestionDropdown(selected = q2, options = SECURITY_QUESTIONS, onSelect = { q2 = it }, label = "Question 2")
+        Spacer(Modifier.height(8.dp))
+        OverSeeTextField(value = a2, onValueChange = { a2 = it }, label = "Answer", modifier = Modifier.fillMaxWidth())
+
+        if (showError) {
+            Spacer(Modifier.height(16.dp))
+            Text("Please select two distinct questions and answer both.", color = AppTheme.ChildError, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(32.dp))
+
+        Button(
+            onClick = {
+                if (q1 == q2 || a1.isBlank() || a2.isBlank()) {
+                    showError = true
+                } else {
+                    showError = false
+                    onComplete(q1, a1, q2, a2)
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = AppTheme.ChildAccent),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("Finish Setup", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+
+        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 8.dp)) {
+            Text("Cancel", color = AppTheme.ChildTextSecondary)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QuestionDropdown(selected: String, options: List<String>, onSelect: (String) -> Unit, label: String) {
+    var expanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = selected,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(Color.White)
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option, fontSize = 13.sp, lineHeight = 18.sp) },
+                    onClick = {
+                        onSelect(option)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }
@@ -183,6 +328,83 @@ fun PermissionGridItem(title: String, icon: androidx.compose.ui.graphics.vector.
             Button(onClick = onClick, modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp), colors = ButtonDefaults.buttonColors(containerColor = if (isGranted) AppTheme.ChildSuccess else AppTheme.ChildAccent), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
                 Text(text = if (isGranted) "Granted" else "Enable", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
             }
+        }
+    }
+}
+// =========================================================================
+// 4. SECURITY QUESTION RECOVERY SCREEN
+// =========================================================================
+@Composable
+fun SecurityQuestionRecoveryScreen(
+    onSuccess: () -> Unit,
+    onCancel: () -> Unit
+) {
+    val context = LocalContext.current
+
+    // Load the saved questions and hashed answers
+    val savedQ1 = remember { AppPreferenceManager.getString(context, "sec_q1", "") }
+    val savedA1Hash = remember { AppPreferenceManager.getString(context, "sec_a1_hash", "") }
+    val savedQ2 = remember { AppPreferenceManager.getString(context, "sec_q2", "") }
+    val savedA2Hash = remember { AppPreferenceManager.getString(context, "sec_a2_hash", "") }
+
+    var a1 by remember { mutableStateOf("") }
+    var a2 by remember { mutableStateOf("") }
+    var showError by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppTheme.ChildBackground)
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(32.dp))
+        Icon(Icons.Rounded.Visibility, contentDescription = null, modifier = Modifier.size(56.dp), tint = AppTheme.ChildAccent)
+        Spacer(Modifier.height(16.dp))
+        Text("PIN Recovery", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
+        Text(
+            "Answer your security questions to reset the dashboard PIN.",
+            fontSize = 14.sp, textAlign = TextAlign.Center, color = AppTheme.ChildTextSecondary, lineHeight = 20.sp,
+            modifier = Modifier.padding(top = 8.dp, bottom = 32.dp)
+        )
+
+        // Question 1
+        Text(savedQ1, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+        OverSeeTextField(value = a1, onValueChange = { a1 = it }, label = "Answer", modifier = Modifier.fillMaxWidth())
+
+        Spacer(Modifier.height(24.dp))
+
+        // Question 2
+        Text(savedQ2, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+        OverSeeTextField(value = a2, onValueChange = { a2 = it }, label = "Answer", modifier = Modifier.fillMaxWidth())
+
+        if (showError) {
+            Spacer(Modifier.height(16.dp))
+            Text("One or both answers are incorrect.", color = AppTheme.ChildError, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.height(32.dp))
+
+        Button(
+            onClick = {
+                // Hash the current inputs and compare them to the saved hashes!
+                if (hashSecurityAnswer(a1) == savedA1Hash && hashSecurityAnswer(a2) == savedA2Hash) {
+                    showError = false
+                    onSuccess() // Correct! Let them reset the PIN.
+                } else {
+                    showError = true
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = AppTheme.ChildAccent),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text("Verify & Reset PIN", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+
+        TextButton(onClick = onCancel, modifier = Modifier.padding(top = 8.dp)) {
+            Text("Cancel", color = AppTheme.ChildTextSecondary)
         }
     }
 }
