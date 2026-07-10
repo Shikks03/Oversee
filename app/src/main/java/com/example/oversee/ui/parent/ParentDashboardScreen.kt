@@ -66,7 +66,7 @@ fun ParentDashboardScreen(
 
     BackHandler(enabled = currentTab != 0) {
         currentTab = when (currentTab) {
-            in 6..15 -> 3
+            in 6..16 -> 3
             5 -> 0
             else -> 0
         }
@@ -109,6 +109,7 @@ fun ParentDashboardScreen(
                     onLogoutClick = { showLogoutDialog = true },
                     onDebugResetRole = onDebugResetRole,
                     onSyncHistoryClick = { currentTab = 6 },
+                    onAuditLogsClick = { currentTab = 16 },
                     onHelpSupportClick = { currentTab = 14 },
                     onAddChildClick = { showAddChildDialog = true },
                     onPunishmentClick = { currentTab = 7 },
@@ -124,6 +125,7 @@ fun ParentDashboardScreen(
 //                13 -> QuietHoursScreen(onBackClick = { currentTab = 3 })
                 14 -> HelpSupportScreen(onBackClick = { currentTab = 3 })
                 15 -> PrivacyPolicyScreen(onBackClick = { currentTab = 3 })
+                16 -> AuditLogScreen(onBackClick = { currentTab = 3 })
             }
         }
 

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.oversee.data.AuditRepository
 import com.example.oversee.data.DeviceRepository
 import com.example.oversee.data.PunishmentRepository
 import com.example.oversee.data.local.AppPreferenceManager
@@ -478,6 +479,9 @@ private fun PunishmentEditor(selectedChild: DeviceRepository.ChildDevice, fid: S
                         )
                     ) { ok ->
                         saving = false
+                        if (ok) {
+                            AuditRepository.logEvent(context, "SETTING_CHANGED", "Updated timeout & punishment rules")
+                        }
                         android.widget.Toast.makeText(
                             context,
                             if (ok) "Saved" else "Save failed — check connection",

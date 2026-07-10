@@ -18,9 +18,10 @@ object AuthRepository {
                 FirebaseAuthManager.signIn(email, pass) { success, error ->
                     if (success) {
                         LoginRateLimiter.resetAttempts(ip)
-                        val uid = getUserId() ?: return@signIn
 
-                        // --- FIX: Run heavy crypto math on a background thread ---
+                        AuditRepository.logEvent(context, "USER_LOGIN", "Successful login: $email")
+
+                        val uid = getUserId() ?: return@signIn
                         Thread {
                             val derivedKek = com.example.oversee.data.local.CryptoManager.deriveKeyEncryptionKey(pass, email)
 

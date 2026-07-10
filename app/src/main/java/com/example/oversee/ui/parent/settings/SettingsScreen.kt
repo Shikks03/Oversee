@@ -32,6 +32,7 @@ fun SettingsScreen(
     onLogoutClick: () -> Unit,
     onDebugResetRole: () -> Unit,
     onSyncHistoryClick: () -> Unit,
+    onAuditLogsClick: () -> Unit,
     onHelpSupportClick: () -> Unit,
     onAddChildClick: () -> Unit,
     onPunishmentClick: () -> Unit = {},
@@ -86,6 +87,12 @@ fun SettingsScreen(
         // 5. Developer
         SettingsGroup("Developer") {
             SettingsItem(Icons.Default.BugReport, "Reset Role Selection", "Return to Parent/Child selection", onClick = onDebugResetRole)
+            SettingsItem(
+                icon = Icons.Default.Security,
+                title = "System Audit Logs",
+                subtitle = "View login history and system changes",
+                onClick = onAuditLogsClick
+            )
         }
         Spacer(Modifier.height(40.dp))
     }

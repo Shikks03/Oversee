@@ -89,7 +89,9 @@ object PunishmentRepository {
         )
         db.collection(COLLECTION_SESSIONS).document(childFid)
             .set(data, SetOptions.merge())
-            .addOnSuccessListener { onComplete(true) }
+            .addOnSuccessListener {
+                onComplete(true)
+            }
             .addOnFailureListener { e ->
                 Log.w(TAG, "saveConfig failed for $childFid: ${e.message}")
                 onComplete(false)

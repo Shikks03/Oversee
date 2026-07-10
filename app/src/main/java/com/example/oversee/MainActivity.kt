@@ -32,6 +32,7 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.oversee.data.AuditRepository
 
 // --- PROJECT SPECIFIC IMPORTS ---
 import com.example.oversee.data.AuthRepository
@@ -420,6 +421,9 @@ fun AppRouter() {
                         if (fid != null && uid2 != null) {
                             DeviceRepository.renameChild(uid2, fid, newName) { success ->
                                 if (success) {
+                                    // >>> ADD THIS LINE HERE <<<
+                                    AuditRepository.logEvent(context, "SETTING_CHANGED", "Renamed child device to '$newName'")
+
                                     val i = children.indexOfFirst { it.fid == fid }
                                     if (i >= 0) children[i] = children[i].copy(name = newName)
                                     if (children.getOrNull(i)?.displayUid != null) {

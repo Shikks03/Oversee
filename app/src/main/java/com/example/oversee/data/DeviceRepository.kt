@@ -72,7 +72,8 @@ object DeviceRepository {
     }
 
     fun renameChild(uid: String, fid: String, name: String, onComplete: (Boolean) -> Unit) {
-        writeDeviceDoc(uid, fid, mapOf("child_name" to name), onComplete)
+        writeDeviceDoc(uid, fid, mapOf("child_name" to name)) { success ->onComplete(success)
+        }
     }
 
     fun deleteDeviceDoc(uid: String, fid: String, onComplete: (Boolean) -> Unit) {
