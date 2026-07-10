@@ -109,6 +109,7 @@ fun ChildPairingFlow(onPaired: () -> Unit, onBackToLogin: () -> Unit) {
 
         is PairingStage.Decision -> DecisionScreen(
             onAddNew = { startPairing(PairingRepository.Intent.ADD, null) },
+            onQuickLink = { finalize(PairingRepository.Intent.ADD, null) },
             onNo = { stage = PairingStage.Secondary }
         )
 
@@ -175,7 +176,7 @@ private fun CenteredProgress(label: String) {
 }
 
 @Composable
-private fun DecisionScreen(onAddNew: () -> Unit, onNo: () -> Unit) {
+private fun DecisionScreen(onAddNew: () -> Unit,onQuickLink: () -> Unit, onNo: () -> Unit) {
     PairingScaffold(
         title = "Add this device?",
         subtitle = "This account already has at least one child device. Do you want to add this phone as a new child?"
@@ -185,6 +186,14 @@ private fun DecisionScreen(onAddNew: () -> Unit, onNo: () -> Unit) {
             Icon(Icons.Rounded.PersonAdd, null); Spacer(Modifier.width(8.dp))
             Text("Yes, add as new child", fontWeight = FontWeight.Bold)
         }
+        // --- NEW BYPASS BUTTON ---
+        Button(onClick = onQuickLink, modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)), shape = RoundedCornerShape(16.dp)) {
+            Icon(Icons.Rounded.PersonAdd, null, tint = Color.White); Spacer(Modifier.width(8.dp))
+            Text("Quick Link (Bypass Code)", fontWeight = FontWeight.Bold, color = Color.White)
+        }
+        // -------------------------
+
         TextButton(onClick = onNo) { Text("No", color = AppTheme.ChildTextSecondary, fontWeight = FontWeight.Bold) }
     }
 }

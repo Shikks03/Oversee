@@ -43,6 +43,8 @@ object AuthRepository {
                         }.start()
                     } else {
                         LoginRateLimiter.recordFailedAttempt(ip) { attemptsLeft, lockoutMsg ->
+                            AuditRepository.logEvent(context, "FAILED_LOGIN", "Invalid login attempt. Attempts remaining: $attemptsLeft")
+
                             val msg = lockoutMsg
                                 ?: "Incorrect credentials. You have $attemptsLeft attempt(s) left."
                             onResult(false, msg)

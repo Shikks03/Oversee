@@ -25,6 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.example.oversee.data.AuditRepository
 
 // --- PROJECT SPECIFIC ---
 import com.example.oversee.data.AuthRepository
@@ -186,6 +187,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                 AppPreferenceManager.saveString(context, "child_pin", newPin)
                 savedChildPin = newPin
                 if (saveForParentToo) AppPreferenceManager.saveString(context, "parent_pin", newPin)
+                AuditRepository.logEvent(context, "SETTING_CHANGED", "PIN code was updated")
                 isUnlocked = true
             }
         )
@@ -199,6 +201,7 @@ fun ChildDashboardRoute(onLogoutClick: () -> Unit, onDebugResetRole: () -> Unit)
                     // Wipe the forgotten PIN to force the app back to PIN Setup
                     AppPreferenceManager.saveString(context, "child_pin", "")
                     savedChildPin = ""
+                    AuditRepository.logEvent(context, "SETTING_CHANGED", "Parent PIN code was resetted")
                     showRecovery = false
                 },
                 onCancel = { showRecovery = false }

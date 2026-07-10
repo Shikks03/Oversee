@@ -33,6 +33,7 @@ fun SettingsScreen(
     onDebugResetRole: () -> Unit,
     onSyncHistoryClick: () -> Unit,
     onAuditLogsClick: () -> Unit,
+    onSecurityInsightsClick: () -> Unit, // <<< 1. ADD THIS PARAMETER
     onHelpSupportClick: () -> Unit,
     onAddChildClick: () -> Unit,
     onPunishmentClick: () -> Unit = {},
@@ -64,6 +65,12 @@ fun SettingsScreen(
             SettingsItem(Icons.Default.PersonAdd, "Add Child Device", "Pair a new device using its 6-digit code", onClick = onAddChildClick)
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = AppTheme.Border)
             SettingsItem(Icons.Default.LinkOff, "Remove Child Device", "Stop monitoring and delete a child's data", isDestructive = true, onClick = { showRemovePicker = true })
+            SettingsItem(
+                icon = Icons.Default.Analytics,
+                title = "Security Insights Report",
+                subtitle = "View threat analytics and failed logins",
+                onClick = onSecurityInsightsClick
+            )
         }
 
         // 2b. Discipline

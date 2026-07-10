@@ -110,6 +110,7 @@ fun ParentDashboardScreen(
                     onDebugResetRole = onDebugResetRole,
                     onSyncHistoryClick = { currentTab = 6 },
                     onAuditLogsClick = { currentTab = 16 },
+                    onSecurityInsightsClick = { currentTab = 17 },
                     onHelpSupportClick = { currentTab = 14 },
                     onAddChildClick = { showAddChildDialog = true },
                     onPunishmentClick = { currentTab = 7 },
@@ -126,6 +127,7 @@ fun ParentDashboardScreen(
                 14 -> HelpSupportScreen(onBackClick = { currentTab = 3 })
                 15 -> PrivacyPolicyScreen(onBackClick = { currentTab = 3 })
                 16 -> AuditLogScreen(onBackClick = { currentTab = 3 })
+                17 -> SecurityScreen(onBackClick = { currentTab = 3 })
             }
         }
 
