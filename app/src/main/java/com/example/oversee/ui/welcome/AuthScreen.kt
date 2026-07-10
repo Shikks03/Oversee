@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 
 import com.example.oversee.ui.components.inputs.OverSeeTextField
 import com.example.oversee.ui.theme.AppTheme
@@ -43,6 +45,9 @@ fun AuthScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+
+    // NEW: State to hold password policy errors
+    var passwordError by remember { mutableStateOf<String?>(null) }
 
     Box(modifier = Modifier.fillMaxSize().background(AppTheme.PrimaryGradient)) {
         Column(
@@ -129,12 +134,50 @@ fun AuthScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     OverSeeTextField(
-                        value = password, onValueChange = { password = it },
+                        // Clear error automatically when the user starts typing again
+                        value = password, onValueChange = { password = it; passwordError = null },
                         label = "Password",
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        isError = passwordError != null, // Triggers red outline
                         modifier = Modifier.fillMaxWidth()
                     )
+                    AnimatedVisibility(visible = authMode == AuthMode.SIGN_UP) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp, start = 8.dp)
+                        ) {
+                            Text(
+                                text = "Password Requirements:",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Gray
+                            )
+
+                            val hasMinLength = password.length >= 8
+                            val hasUppercase = password.any { it.isUpperCase() }
+                            val hasLowercase = password.any { it.isLowerCase() }
+                            val hasNumber = password.any { it.isDigit() }
+                            val hasSpecial = password.any { !it.isLetterOrDigit() && !it.isWhitespace() }
+
+                            RequirementRow("At least 8 characters", hasMinLength)
+                            RequirementRow("One uppercase letter", hasUppercase)
+                            RequirementRow("One lowercase letter", hasLowercase)
+                            RequirementRow("One number", hasNumber)
+                            RequirementRow("One special character", hasSpecial)
+                        }
+                    }
+                    // NEW: Display the password policy error message
+                    AnimatedVisibility(visible = passwordError != null) {
+                        Text(
+                            text = passwordError ?: "",
+                            color = AppTheme.Error,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, start = 8.dp)
+                        )
+                    }
 
                     AnimatedVisibility(
                         visible = authMode == AuthMode.SIGN_UP,
@@ -158,8 +201,19 @@ fun AuthScreen(
                     Button(
                         onClick = {
                             if (!isLoading) {
-                                if (authMode == AuthMode.SIGN_IN) onSignIn(email, password)
-                                else onSignUp(name, email, password, confirmPassword)
+                                if (authMode == AuthMode.SIGN_IN) {
+                                    onSignIn(email, password)
+                                } else {
+                                    // NEW: Password Complexity Regex Check
+                                    val passwordPattern = "^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[@#\$%^&+=!]).{8,}\$"
+                                    if (!password.matches(passwordPattern.toRegex())) {
+                                        passwordError = "Password must be at least 8 characters long, contain an uppercase letter, a number, and a special character."
+                                        return@Button
+                                    }
+
+                                    passwordError = null
+                                    onSignUp(name, email, password, confirmPassword)
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -191,7 +245,11 @@ fun AuthScreen(
                     Row(
                         modifier = Modifier
                             .clickable {
+                                // Clear inputs and errors when switching modes
                                 authMode = if (authMode == AuthMode.SIGN_UP) AuthMode.SIGN_IN else AuthMode.SIGN_UP
+                                passwordError = null
+                                password = ""
+                                confirmPassword = ""
                             }
                             .padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -202,5 +260,26 @@ fun AuthScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun RequirementRow(text: String, isMet: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = 4.dp)
+    ) {
+        Icon(
+            imageVector = if (isMet) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+            contentDescription = null,
+            tint = if (isMet) Color(0xFF4CAF50) else Color.LightGray, // Green if met
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = text,
+            fontSize = 12.sp,
+            color = if (isMet) Color.DarkGray else Color.Gray
+        )
     }
 }
